@@ -6,8 +6,9 @@
 
 /// Represents a span of time.
 typedef struct duration_s {
-    i64 secs;
-    i32 nanos; // 0 <= nanos < NANOS_PER_SEC
+    f64 secs;
+    /* i64 secs; */
+    i32 nanos;  // 0 <= nanos < NANOS_PER_SEC
 } duration_t;
 
 /// Represents a chronometer with two timepoints, a start and an end.

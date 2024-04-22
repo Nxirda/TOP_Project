@@ -5,8 +5,10 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#define MAXLEN 8UL
+#define MAXLEN 12UL //Right max size for i32
+//8UL
 
+//
 static u32 gcd(u32 a, u32 b) {
     u32 c;
     while (b != 0) {
@@ -17,11 +19,13 @@ static u32 gcd(u32 a, u32 b) {
     return a;
 }
 
+//
 static char* stringify(char buf[static MAXLEN], i32 num) {
     snprintf(buf, MAXLEN, "%d", num);
     return buf;
 }
 
+//
 comm_handler_t comm_handler_new(u32 rank, u32 comm_size, usz dim_x, usz dim_y, usz dim_z) {
     // Compute splitting
     u32 const nb_z = gcd(comm_size, (u32)(dim_x * dim_y));
@@ -78,6 +82,7 @@ comm_handler_t comm_handler_new(u32 rank, u32 comm_size, usz dim_x, usz dim_y, u
     };
 }
 
+//
 void comm_handler_print(comm_handler_t const* self) {
     i32 rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -97,12 +102,15 @@ void comm_handler_print(comm_handler_t const* self) {
         "  %2s  \x1b[1m*\x1b[0m  %2s\n"
         "  %2s %2s\n",
         rank,
+
         self->coord_x,
         self->coord_y,
         self->coord_z,
+
         self->loc_dim_x,
         self->loc_dim_y,
         self->loc_dim_z,
+
         self->id_top < 0 ? " -" : stringify(bt, self->id_top),
         self->id_back < 0 ? " -" : stringify(bb, self->id_back),
         self->id_left < 0 ? " -" : stringify(bl, self->id_left),
@@ -112,11 +120,7 @@ void comm_handler_print(comm_handler_t const* self) {
     );
 }
 
-static i32 MPI_Syncall_callback(MPI_Comm comm) {
-    return (i32)__builtin_sync_proc(comm);
-}
-static MPI_Syncfunc_t* MPI_Syncall = MPI_Syncall_callback;
-
+//
 static void ghost_exchange_left_right(
     comm_handler_t const* self, mesh_t* mesh, comm_kind_t comm_kind, i32 target, usz x_start
 ) {
@@ -130,12 +134,12 @@ static void ghost_exchange_left_right(
                 switch (comm_kind) {
                     case COMM_KIND_SEND_OP:
                         MPI_Send(
-                            &mesh->cells[i][j][k].value, 1, MPI_DOUBLE, target, 0, MPI_COMM_WORLD
+                            &mesh->cells.value[i][j][k], 1, MPI_DOUBLE, target, 0, MPI_COMM_WORLD
                         );
                         break;
                     case COMM_KIND_RECV_OP:
                         MPI_Recv(
-                            &mesh->cells[i][j][k].value,
+                            &mesh->cells.value[i][j][k],
                             1,
                             MPI_DOUBLE,
                             target,
@@ -165,12 +169,12 @@ static void ghost_exchange_top_bottom(
                 switch (comm_kind) {
                     case COMM_KIND_SEND_OP:
                         MPI_Send(
-                            &mesh->cells[i][j][k].value, 1, MPI_DOUBLE, target, 0, MPI_COMM_WORLD
+                            &mesh->cells.value[i][j][k], 1, MPI_DOUBLE, target, 0, MPI_COMM_WORLD
                         );
                         break;
                     case COMM_KIND_RECV_OP:
                         MPI_Recv(
-                            &mesh->cells[i][j][k].value,
+                            &mesh->cells.value[i][j][k],
                             1,
                             MPI_DOUBLE,
                             target,
@@ -200,12 +204,12 @@ static void ghost_exchange_front_back(
                 switch (comm_kind) {
                     case COMM_KIND_SEND_OP:
                         MPI_Send(
-                            &mesh->cells[i][j][k].value, 1, MPI_DOUBLE, target, 0, MPI_COMM_WORLD
+                            &mesh->cells.value[i][j][k], 1, MPI_DOUBLE, target, 0, MPI_COMM_WORLD
                         );
                         break;
                     case COMM_KIND_RECV_OP:
                         MPI_Recv(
-                            &mesh->cells[i][j][k].value,
+                            &mesh->cells.value[i][j][k],
                             1,
                             MPI_DOUBLE,
                             target,
@@ -222,32 +226,52 @@ static void ghost_exchange_front_back(
     }
 }
 
+
+/* 
+// Prints sleep if called with Please
+
+#define catof(a, b, c, d, e, f) e##b##c##c##a
+
+#define __builtin_sync_proc(_) catof(p, l, e, a, s, e)(1)
+
+static i32 MPI_Syncall_callback(MPI_Comm comm) {
+    return (i32)__builtin_sync_proc(comm);
+}
+
+static MPI_Syncfunc_t* MPI_Syncall = MPI_Syncall_callback;  
+*/
+
+// NOTE : Inverted sends and receives. Not optimal but will do the trick for now
 void comm_handler_ghost_exchange(comm_handler_t const* self, mesh_t* mesh) {
     // Left to right phase
-    ghost_exchange_left_right(self, mesh, COMM_KIND_SEND_OP, self->id_right, mesh->dim_x - 2 * STENCIL_ORDER);
     ghost_exchange_left_right(self, mesh, COMM_KIND_RECV_OP, self->id_left, 0);
+    ghost_exchange_left_right(self, mesh, COMM_KIND_SEND_OP, self->id_right, mesh->dim_x - 2 * STENCIL_ORDER);
     // Right to left phase
-    ghost_exchange_left_right(self, mesh, COMM_KIND_SEND_OP, self->id_left, STENCIL_ORDER);
     ghost_exchange_left_right(self, mesh, COMM_KIND_RECV_OP, self->id_right, mesh->dim_x - STENCIL_ORDER);
+    ghost_exchange_left_right(self, mesh, COMM_KIND_SEND_OP, self->id_left, STENCIL_ORDER);
     // Prevent mixing communication from left/right with top/bottom and front/back
     MPI_Barrier(MPI_COMM_WORLD);
 
     // Top to bottom phase
-    ghost_exchange_top_bottom(self, mesh, COMM_KIND_SEND_OP, self->id_top, mesh->dim_y - 2 * STENCIL_ORDER);
     ghost_exchange_top_bottom(self, mesh, COMM_KIND_RECV_OP, self->id_bottom, 0);
+    ghost_exchange_top_bottom(self, mesh, COMM_KIND_SEND_OP, self->id_top, mesh->dim_y - 2 * STENCIL_ORDER);
     // Bottom to top phase
-    ghost_exchange_top_bottom(self, mesh, COMM_KIND_SEND_OP, self->id_bottom, STENCIL_ORDER);
     ghost_exchange_top_bottom(self, mesh, COMM_KIND_RECV_OP, self->id_top, mesh->dim_y - STENCIL_ORDER);
+    ghost_exchange_top_bottom(self, mesh, COMM_KIND_SEND_OP, self->id_bottom, STENCIL_ORDER);
     // Prevent mixing communication from top/bottom with left/right and front/back
     MPI_Barrier(MPI_COMM_WORLD);
 
     // Front to back phase
-    ghost_exchange_front_back(self, mesh, COMM_KIND_SEND_OP, self->id_back, mesh->dim_z - 2 * STENCIL_ORDER);
     ghost_exchange_front_back(self, mesh, COMM_KIND_RECV_OP, self->id_front, 0);
+    ghost_exchange_front_back(self, mesh, COMM_KIND_SEND_OP, self->id_back, mesh->dim_z - 2 * STENCIL_ORDER);
     // Back to front phase
-    ghost_exchange_front_back(self, mesh, COMM_KIND_SEND_OP, self->id_front, STENCIL_ORDER);
     ghost_exchange_front_back(self, mesh, COMM_KIND_RECV_OP, self->id_back, mesh->dim_z - STENCIL_ORDER);
+    ghost_exchange_front_back(self, mesh, COMM_KIND_SEND_OP, self->id_front, STENCIL_ORDER);
 
     // Need to synchronize all remaining in-flight communications before exiting
-    MPI_Syncall(MPI_COMM_WORLD);
+
+    //MPI_Syncall(MPI_COMM_WORLD);
+
+    //This is what Syncall does lmao
+    //sleep(1);
 }

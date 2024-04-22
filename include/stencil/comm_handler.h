@@ -9,8 +9,9 @@
 typedef enum comm_kind_e {
     COMM_KIND_SEND_OP,
     COMM_KIND_RECV_OP,
-} comm_kind_t;
-typedef int MPI_Syncfunc_t(MPI_Comm);
+} __attribute__((packed)) comm_kind_t;
+
+//typedef int MPI_Syncfunc_t(MPI_Comm);
 
 /// Handler for MPI communications between neighboor processes (ghost cell exchanges).
 typedef struct comm_handler_s {
@@ -44,7 +45,7 @@ typedef struct comm_handler_s {
     i32 id_back;
     /// Rank of the front neighboor process, -1 if none.
     i32 id_front;
-} comm_handler_t;
+}  __attribute__((packed)) comm_handler_t;
 
 comm_handler_t comm_handler_new(u32 rank, u32 comm_size, usz dim_x, usz dim_y, usz dim_z);
 

@@ -45,17 +45,18 @@ static void save_results(
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     i32 comm_size;
     MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
-    if (rank != 0) MPI_Allreduce(&loc_elapsed_s, &glob_elapsed_s, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+    /* if (rank != 0) */ 
+    MPI_Allreduce(&loc_elapsed_s, &glob_elapsed_s, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(&loc_ns_per_elem, &glob_ns_per_elem, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
     if (mid_x_is_in && mid_y_is_in && mid_z_is_in) {
         fprintf(
             ofp,
             "%+18.15lf %12.9lf %12.3lf %zu %zu %zu\n",
-            mesh->cells[mid_x - comm_handler->coord_x + STENCIL_ORDER]
+            mesh->cells.value[mid_x - comm_handler->coord_x + STENCIL_ORDER]
                        [mid_y - comm_handler->coord_y + STENCIL_ORDER]
-                       [mid_z - comm_handler->coord_z + STENCIL_ORDER]
-                           .value,
+                       [mid_z - comm_handler->coord_z + STENCIL_ORDER],
             glob_elapsed_s / (f64)comm_size,
             glob_ns_per_elem / (f64)comm_size,
             cfg->dim_x,
@@ -65,11 +66,21 @@ static void save_results(
     }
 }
 
+/* printf("=== Base Sizes ===\n");
+    printf("cell_kind_t     : %ld\n", sizeof(cell_kind_t));
+    printf("cell_t          : %ld\n", sizeof(cell_t));
+    printf("mesh_kind_t     : %ld\n", sizeof(mesh_kind_t));
+    printf("mesh_t          : %ld\n", sizeof(mesh_t));
+    printf("comm_kind_t     : %ld\n", sizeof(comm_kind_t));
+    printf("comm_handler_t  : %ld\n", sizeof(comm_handler_t)); */
+    
+//
 i32 main(i32 argc, char* argv[argc + 1]) {
     MPI_Init(&argc, &argv);
 
     i32 rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
     i32 comm_size;
     MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
 
@@ -77,6 +88,7 @@ i32 main(i32 argc, char* argv[argc + 1]) {
     char* output_path;
     if (2 == argc) {
         config_path = argv[1];
+        output_path = DEFAULT_OUTPUT_PATH;
     } else if (3 == argc) {
         config_path = argv[1];
         output_path = argv[2];
@@ -84,7 +96,9 @@ i32 main(i32 argc, char* argv[argc + 1]) {
         config_path = DEFAULT_CONFIG_PATH;
         output_path = DEFAULT_OUTPUT_PATH;
     }
+
     config_t cfg = config_parse_from_file(config_path);
+
 #ifndef NDEBUG
     if (rank == 0) {
         config_print(&cfg);
@@ -103,6 +117,7 @@ i32 main(i32 argc, char* argv[argc + 1]) {
 
     comm_handler_t comm_handler =
         comm_handler_new((u32)rank, (u32)comm_size, cfg.dim_x, cfg.dim_y, cfg.dim_z);
+
 #ifndef NDEBUG
     comm_handler_print(&comm_handler);
 #endif
@@ -110,12 +125,15 @@ i32 main(i32 argc, char* argv[argc + 1]) {
     mesh_t A = mesh_new(
         comm_handler.loc_dim_x, comm_handler.loc_dim_y, comm_handler.loc_dim_z, MESH_KIND_INPUT
     );
+
     mesh_t B = mesh_new(
         comm_handler.loc_dim_x, comm_handler.loc_dim_y, comm_handler.loc_dim_z, MESH_KIND_CONSTANT
     );
+    
     mesh_t C = mesh_new(
         comm_handler.loc_dim_x, comm_handler.loc_dim_y, comm_handler.loc_dim_z, MESH_KIND_OUTPUT
     );
+    
     init_meshes(&A, &B, &C, &comm_handler);
 
     // Exchange ghost cells to make sure data is properly initialized everywhere
@@ -124,12 +142,15 @@ i32 main(i32 argc, char* argv[argc + 1]) {
     comm_handler_ghost_exchange(&comm_handler, &C);
 
     chrono_t chrono;
+
 #ifndef NDEBUG
     if (rank == 0) {
         fprintf(stderr, "****************************************\n");
     }
 #endif
+
     for (usz it = 0; it < cfg.niter; ++it) {
+        
 #ifndef NDEBUG
         if (rank == 0) {
             fprintf(stderr, "Iteration #%2zu/%2zu\r", it + 1, cfg.niter);
@@ -137,6 +158,7 @@ i32 main(i32 argc, char* argv[argc + 1]) {
 #endif
 
         chrono_start(&chrono);
+
         // Compute Jacobi C=B@A (one iteration)
         solve_jacobi(&A, &B, &C);
 
@@ -144,9 +166,11 @@ i32 main(i32 argc, char* argv[argc + 1]) {
         // No need to exchange B as its a constant mesh
         comm_handler_ghost_exchange(&comm_handler, &A);
         comm_handler_ghost_exchange(&comm_handler, &C);
+
         chrono_stop(&chrono);
 
         duration_t elapsed = chrono_elapsed(chrono);
+
         save_results(ofp, &cfg, &A, &comm_handler, elapsed);
     }
 
