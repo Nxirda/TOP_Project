@@ -1,7 +1,0 @@
-/home/nxirda/Desktop/Projects/TOP_Project/Debug/CMakeFiles/top-stencil.dir
-/home/nxirda/Desktop/Projects/TOP_Project/Debug/CMakeFiles/edit_cache.dir
-/home/nxirda/Desktop/Projects/TOP_Project/Debug/CMakeFiles/rebuild_cache.dir
-/home/nxirda/Desktop/Projects/TOP_Project/Debug/src/CMakeFiles/stencil.dir
-/home/nxirda/Desktop/Projects/TOP_Project/Debug/src/CMakeFiles/utils.dir
-/home/nxirda/Desktop/Projects/TOP_Project/Debug/src/CMakeFiles/edit_cache.dir
-/home/nxirda/Desktop/Projects/TOP_Project/Debug/src/CMakeFiles/rebuild_cache.dir

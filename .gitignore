@@ -59,8 +59,7 @@ Mkfile.old
 dkms.conf
 
 # Project specific 
-#build/
-#release/
 bench_config.txt
 results/
 temp/
+.vscode
