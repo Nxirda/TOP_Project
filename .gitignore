@@ -1,6 +1,13 @@
 # Prerequisites
 *.d
 
+# CMake directories
+
+[Bb]uild
+[Dd]ebug
+[Rr]elease
+cmake-build-*
+
 # Object files
 *.o
 *.ko
@@ -52,8 +59,8 @@ Mkfile.old
 dkms.conf
 
 # Project specific 
-build/
-release/
+#build/
+#release/
 bench_config.txt
 results/
 temp/
