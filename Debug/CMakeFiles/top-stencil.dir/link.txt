@@ -1,0 +1,1 @@
+/usr/local/mpich-3.4.1/bin/mpicc -g "CMakeFiles/top-stencil.dir/src/main.c.o" -o top-stencil  -Wl,-rpath,/home/nxirda/Desktop/Projects/TOP_Project/Debug/src:/usr/local/mpich-3.4.1/lib src/libstencil.so src/libutils.so /usr/local/mpich-3.4.1/lib/libmpi.so -lm 

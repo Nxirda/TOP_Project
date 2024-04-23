@@ -1,0 +1,1 @@
+/usr/local/mpich-3.4.1/bin/mpicc -fPIC -g -shared -Wl,-soname,libutils.so -o libutils.so CMakeFiles/utils.dir/chrono.c.o 

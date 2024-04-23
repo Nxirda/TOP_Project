@@ -12,8 +12,11 @@ target_include_directories(stencil
 
 target_link_libraries(stencil 
                         PUBLIC 
-                        ${MPI_C_LIBRARIES})
-                        #OpenMP::OpenMP_C)
+                        ${MPI_C_LIBRARIES}
+                        m 
+                        )
+                        
+#OpenMP::OpenMP_C)
 
 add_library(utils 
             SHARED 

@@ -1,9 +1,9 @@
 #pragma once
 
-#include "stencil/mesh.h"
+#include "mesh.h"
 #include "types.h"
 
-#include <mpi.h>
+#include "mpi.h"
 
 /// Enum for communication kind (either a send or a receive operation).
 typedef enum comm_kind_e {

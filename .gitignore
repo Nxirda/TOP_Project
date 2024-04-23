@@ -56,3 +56,4 @@ build/
 release/
 bench_config.txt
 results/
+temp/
