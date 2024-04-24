@@ -10,36 +10,53 @@
 #define CELL_NEIGH 6  // Number of neighbors a cell has
 
 //
-// Function to perform 3D matrix multiplication using BLAS
-/* void
-matrix_mul_three_dim (f64 ***A, f64 ***B, f64 ***C, usz dim_x, usz dim_y, usz
-dim_z)
-{
-  // Loop through the matrices and perform multiplication
-  for (size_t i = STENCIL_ORDER; i < dim_x; ++i)
-    {
-      // Multiply A[i] and B[i], store the result in C[i]
-      cblas_dgemm (CblasRowMajor, CblasNoTrans, CblasNoTrans, i, dim_z, dim_y,
-                   1.0, A[i][0], dim_y, B[i][0], dim_z, 0.0, C[i][0], dim_z);
-    }
-} */
-
 void
-elementwise_multiply (f64 ***A, f64 ***B, usz dim_x, usz dim_y,
-                      usz dim_z)
+elementwise_multiply (f64 ***A, f64 ***B, usz dim_x, usz dim_y, usz dim_z)
 {
-  int i, j, k;
+  usz i, j, k;
+  usz UNROLL_FACTOR = 16;
+  usz lim = dim_z - (dim_z % UNROLL_FACTOR);
 
   for (i = STENCIL_ORDER; i < dim_x; i++)
     {
       for (j = STENCIL_ORDER; j < dim_y; j++)
         {
-          for (k = STENCIL_ORDER; k < dim_z; k += 4)
+          for (k = STENCIL_ORDER; k < lim; k += UNROLL_FACTOR)
             {
-              A[i][j][k] = A[i][j][k] * B[i][j][k];
-              A[i][j][k + 1] = A[i][j][k + 1] * B[i][j][k + 1];
-              A[i][j][k + 2] = A[i][j][k + 2] * B[i][j][k + 2];
-              A[i][j][k + 3] = A[i][j][k + 3] * B[i][j][k + 3];
+              usz _k4_ = k + 4;
+              usz _k8_ = k + 8;
+              usz _k12_ = k + 12;
+
+              __m256d A_reg = _mm256_loadu_pd (&A[i][j][k]);
+              __m256d B_reg = _mm256_loadu_pd (&B[i][j][k]);
+
+              __m256d A4_reg = _mm256_loadu_pd (&A[i][j][_k4_]);
+              __m256d B4_reg = _mm256_loadu_pd (&B[i][j][_k4_]);
+
+              _mm256_storeu_pd (&A[i][j][k], _mm256_mul_pd (A_reg, B_reg));
+
+              _mm256_storeu_pd (&A[i][j][_k4_],
+                                _mm256_mul_pd (A4_reg, B4_reg));
+
+              __m256d A8_reg = _mm256_loadu_pd (&A[i][j][_k8_]);
+              __m256d B8_reg = _mm256_loadu_pd (&B[i][j][_k8_]);
+
+              __m256d A12_reg = _mm256_loadu_pd (&A[i][j][_k12_]);
+              __m256d B12_reg = _mm256_loadu_pd (&B[i][j][_k12_]);
+
+              _mm256_storeu_pd (&A[i][j][_k8_],
+                                _mm256_mul_pd (A8_reg, B8_reg));
+
+              _mm256_storeu_pd (&A[i][j][_k12_],
+                                _mm256_mul_pd (A12_reg, B12_reg));
+            }
+
+          for (k = lim; k < dim_z; k++)
+            {
+              __m256d A_reg = _mm256_loadu_pd (&A[i][j][k]);
+              __m256d B_reg = _mm256_loadu_pd (&B[i][j][k]);
+
+              _mm256_storeu_pd (&A[i][j][k], _mm256_mul_pd (A_reg, B_reg));
             }
         }
     }
@@ -67,8 +84,6 @@ solve_jacobi (mesh_t *A, mesh_t const *B, mesh_t *C,
 
   elementwise_multiply (A->values, B->values, lim_x, lim_y, lim_z);
 
-  // matrix_mul_three_dim(A->values, B->values ,C->values, A->dim_x, A->dim_y,
-  // A->dim_z);
   //  NOTE : Cache blocking
   for (usz x = STENCIL_ORDER; x < lim_x; x += BLOCK_SIZE)
     {
@@ -85,8 +100,6 @@ solve_jacobi (mesh_t *A, mesh_t const *B, mesh_t *C,
                           // NOTE : total of 16 YMM reg
                           // Load in ymm reg
                           f64 current_value = A->values[i][j][k];
-                          /* A->values[i][j][k] *
-                                                   B->values[i][j][k]; */
                           /*
                           NOTE : Factored the power computation
                                   Removed unnecessary memory accesses for
@@ -99,24 +112,13 @@ solve_jacobi (mesh_t *A, mesh_t const *B, mesh_t *C,
                               __m256d ymm_pow
                                   = _mm256_broadcast_sd (&pow_result);
 
-                              *(temp_ymm_one) = A->values[i+o][j][k];
-                              /* A->values[i + o][j][k]
-                                                * B->values[i + o][j][k]; */
-                              *(temp_ymm_one + 1) = A->values[i-o][j][k];
-                              /* A->values[i - o][j][k]
-                                                    * B->values[i - o][j][k]; */
-                              *(temp_ymm_one + 2) = A->values[i][j+o][k];
-                              /* A->values[i][j + o][k]
-                                                    * B->values[i][j + o][k]; */
-                              *(temp_ymm_one + 3) = A->values[i][j-o][k];
-                              /* A->values[i][j - o][k]
-                                                    * B->values[i][j - o][k]; */
-                              *(temp_ymm_two) = A->values[i][j][k+o];
-                              /* A->values[i][j][k + o]
-                                                * B->values[i][j][k + o]; */
-                              *(temp_ymm_two + 1) = A->values[i][j][k-o];;
-                              /* A->values[i][j][k - o]
-                                                    * B->values[i][j][k - o]; */
+                              *(temp_ymm_one) = A->values[i + o][j][k];
+                              *(temp_ymm_one + 1) = A->values[i - o][j][k];
+                              *(temp_ymm_one + 2) = A->values[i][j + o][k];
+                              *(temp_ymm_one + 3) = A->values[i][j - o][k];
+
+                              *(temp_ymm_two) = A->values[i][j][k + o];
+                              *(temp_ymm_two + 1) = A->values[i][j][k - o];
 
                               __m256d ymm_one = _mm256_load_pd (temp_ymm_one);
                               __m256d ymm_two
@@ -131,6 +133,7 @@ solve_jacobi (mesh_t *A, mesh_t const *B, mesh_t *C,
                               __m256d final_res = _mm256_hadd_pd (
                                   pow_result_1, pow_result_2);
                               _mm256_store_pd (temp_ymm_one, final_res);
+
                               current_value += *(temp_ymm_one)
                                                + *(temp_ymm_one + 1)
                                                + *(temp_ymm_one + 2)
@@ -233,3 +236,128 @@ o][j][k] * (pow_result); current_value += A->cells.value[i][j + o][k] *
         }
     }
 }*/
+
+// NOTE : Passed the func to be layout right (base was layout  left)
+void
+solve_jacobi_2 (mesh_t *A, mesh_t const *B, mesh_t *C,
+                f64 pow_precomputed[static STENCIL_ORDER])
+{
+  assert (A->dim_x == B->dim_x && B->dim_x == C->dim_x);
+  assert (A->dim_y == B->dim_y && B->dim_y == C->dim_y);
+  assert (A->dim_z == B->dim_z && B->dim_z == C->dim_z);
+
+  usz const lim_x = A->dim_x - STENCIL_ORDER;
+  usz const lim_y = A->dim_y - STENCIL_ORDER;
+  usz const lim_z = A->dim_z - STENCIL_ORDER;
+
+  elementwise_multiply (A->values, B->values, lim_x, lim_y, lim_z);
+
+  __m256d pow_low = _mm256_load_pd (pow_precomputed);
+  __m256d pow_high = _mm256_load_pd (4 + pow_precomputed);
+  f64 temp[4];
+  //  NOTE : Cache blocking
+  /* for (usz x = STENCIL_ORDER; x < lim_x; x += BLOCK_SIZE)
+    {
+      for (usz y = STENCIL_ORDER; y < lim_y; y += BLOCK_SIZE)
+        {
+          for (usz z = STENCIL_ORDER; z < lim_z; z += BLOCK_SIZE)
+            { */
+  for (usz i = STENCIL_ORDER; i < lim_x; ++i)
+    {
+      for (usz j = STENCIL_ORDER; j < lim_y; ++j)
+        {
+          for (usz k = STENCIL_ORDER; k < lim_z; ++k)
+            {
+              // NOTE : total of 16 YMM reg
+              // Load in ymm reg
+              //f64 current_value = A->values[i][j][k];
+              /*
+              NOTE : Factored the power computation
+                      Removed unnecessary memory accesses for
+              C->cells[i][j][k]
+              */
+              // Positive A neighbors on x axis
+              __m256d piA1_4 = _mm256_set_pd (
+                  A->values[i + 4][j][k], A->values[i + 3][j][k],
+                  A->values[i + 2][j][k], A->values[i + 1][j][k]);
+
+              __m256d piA5_8 = _mm256_set_pd (
+                  A->values[i + 8][j][k], A->values[i + 7][j][k],
+                  A->values[i + 6][j][k], A->values[i + 5][j][k]);
+
+              // Negative A neighbors on x axis
+              __m256d niA1_4 = _mm256_set_pd (
+                  A->values[i - 4][j][k], A->values[i - 3][j][k],
+                  A->values[i - 2][j][k], A->values[i - 1][j][k]);
+
+              __m256d niA5_8 = _mm256_set_pd (
+                  A->values[i - 8][j][k], A->values[i - 7][j][k],
+                  A->values[i - 6][j][k], A->values[i - 5][j][k]);
+
+              // Positive A neighbors on y axis
+              __m256d pjA1_4 = _mm256_set_pd (
+                  A->values[i][j + 4][k], A->values[i][j + 3][k],
+                  A->values[i][j + 2][k], A->values[i][j + 1][k]);
+
+              __m256d pjA5_8 = _mm256_set_pd (
+                  A->values[i][j + 8][k], A->values[i][j + 7][k],
+                  A->values[i][j + 6][k], A->values[i][j + 5][k]);
+
+              // Negative A neighbors on y axis
+              __m256d njA1_4 = _mm256_set_pd (
+                  A->values[i][j - 4][k], A->values[i][j - 3][k],
+                  A->values[i][j - 2][k], A->values[i][j - 1][k]);
+
+              __m256d njA5_8 = _mm256_set_pd (
+                  A->values[i][j - 8][k], A->values[i][j - 7][k],
+                  A->values[i][j - 6][k], A->values[i][j - 5][k]);
+
+              // Positive A neighbors on z axis
+              __m256d pkA1_4 = _mm256_set_pd (
+                  A->values[i][j][k + 4], A->values[i][j][k + 3],
+                  A->values[i][j][k + 2], A->values[i][j][k + 1]);
+
+              __m256d pkA5_8 = _mm256_set_pd (
+                  A->values[i][j][k + 8], A->values[i][j][k + 7],
+                  A->values[i][j][k + 6], A->values[i][j][k + 5]);
+
+              // Negative A neighbors on z axis
+              __m256d nkA1_4 = _mm256_set_pd (
+                  A->values[i][j][k - 4], A->values[i][j][k - 3],
+                  A->values[i][j][k - 2], A->values[i][j][k - 1]);
+
+              __m256d nkA5_8 = _mm256_set_pd (
+                  A->values[i][j][k - 8], A->values[i][j][k - 7],
+                  A->values[i][j][k - 6], A->values[i][j][k - 5]);
+
+              // Computations
+              __m256d result;
+              result = _mm256_mul_pd (piA1_4, pow_low);
+              result = _mm256_fmadd_pd (pjA1_4, pow_low, result);
+              result = _mm256_fmadd_pd (pkA1_4, pow_low, result);
+              result = _mm256_fmadd_pd (niA1_4, pow_low, result);
+              result = _mm256_fmadd_pd (njA1_4, pow_low, result);
+              result = _mm256_fmadd_pd (nkA1_4, pow_low, result);
+
+              result = _mm256_fmadd_pd (piA5_8, pow_high, result);
+              result = _mm256_fmadd_pd (pjA5_8, pow_high, result);
+              result = _mm256_fmadd_pd (pkA5_8, pow_high, result);
+              result = _mm256_fmadd_pd (niA5_8, pow_high, result);
+              result = _mm256_fmadd_pd (njA5_8, pow_high, result);
+              result = _mm256_fmadd_pd (nkA5_8, pow_high, result);
+
+              _mm256_store_pd (temp, result);
+
+              C->values[i][j][k] = A->values[i][j][k] + *(temp) + *(temp + 1)
+                                   + *(temp + 2) + *(temp + 3);
+            }
+        }
+    }
+  //} // END CACHE BLOCK z
+  /*  }     // END CACHE BLOCK y
+}      */    // END CACHE BLOCK x
+
+  /* free (temp_ymm_one);
+  free (temp_ymm_two); */
+  mesh_copy_core (A, C);
+}
