@@ -14,9 +14,10 @@ target_link_libraries(stencil
                         PUBLIC 
                         ${MPI_C_LIBRARIES}
                         m 
+                        ${BLAS_LIBRARIES}
                         )
-                        
-#OpenMP::OpenMP_C)
+
+#)
 
 add_library(utils 
             SHARED 

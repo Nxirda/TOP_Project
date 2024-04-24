@@ -17,6 +17,9 @@ if(MPI_FOUND)
     set(CMAKE_C_COMPILER ${MPI_C_COMPILER})
 endif()
 
+find_package(BLAS REQUIRED)
+
+
 # Print the compiler being used
 message("Compiler   : ${CMAKE_C_COMPILER}")
 message("Build type : ${CMAKE_BUILD_TYPE}")
