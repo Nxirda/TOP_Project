@@ -23,7 +23,7 @@
             for (k = STENCIL_ORDER; k < A->dim_z - STENCIL_ORDER; k += 4) {
                 __m256d acc = _mm256_setzero_pd();
 
-                // NOTE: We load A & B for C = A + B (can broadcast_sd maybe ? or load_pd because out of inside loop, memory is alligned ?)
+                // NOTE: We load A & B for C = A * B (can broadcast_sd maybe ? or load_pd because out of inside loop, memory is alligned ?)
                 __m256d self_vals_A = _mm256_loadu_pd(&A->values[i][j][k]);
                 __m256d self_vals_B = _mm256_loadu_pd(&B->values[i][j][k]);
                 __m256d self_product = _mm256_mul_pd(self_vals_A, self_vals_B);
@@ -70,7 +70,11 @@
     mesh_copy_core(A, C);
 }*/
 
-/* NOTE: Wrong computation
+
+
+//NOTE: Wrong computation, need to Hadd_pd as said in the next version
+
+/*
 void solve_jacobi(mesh_t *A, const mesh_t *B, mesh_t *C) {
     assert(A->dim_x == B->dim_x && B->dim_x == C->dim_x);
     assert(A->dim_y == B->dim_y && B->dim_y == C->dim_y);
@@ -126,6 +130,8 @@ void solve_jacobi(mesh_t *A, const mesh_t *B, mesh_t *C) {
 }
 */
 
+
+
 // NOTE: Maybe I need to try to hadd, better precision ?
 
 void solve_jacobi(mesh_t *A, const mesh_t *B, mesh_t *C) {
@@ -143,7 +149,6 @@ void solve_jacobi(mesh_t *A, const mesh_t *B, mesh_t *C) {
     for (i = STENCIL_ORDER; i < A->dim_x - STENCIL_ORDER; ++i) {
         for (j = STENCIL_ORDER; j < A->dim_y - STENCIL_ORDER; ++j) {
             for (k = STENCIL_ORDER; k < A->dim_z - STENCIL_ORDER; ++k) {
-                // Accumulateur pour le résultat final pour C[i][j][k]
                 __m256d acc = _mm256_setzero_pd();
 
                 __m256d self_val_A = _mm256_broadcast_sd(&A->values[i][j][k]);
@@ -187,7 +192,7 @@ void solve_jacobi(mesh_t *A, const mesh_t *B, mesh_t *C) {
 /*
                     // NOTE: We can HADD this way if we store each neighbour in the same 
                     // vector for each low and high 128-bits separately, 
-                    //without ever crossing the 128-bit boundary
+                    // We never crossing the 128-bit boundary
                     // Thus doing it that way : compute 4 two-element horizontal sums:
                     // lower 64 bits contain A1[0] + A1[1]
                     // next 64 bits contain B1[0] + B1[1]
