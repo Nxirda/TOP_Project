@@ -149,12 +149,12 @@ void solve_jacobi(mesh_t *A, const mesh_t *B, mesh_t *C) {
     for (i = STENCIL_ORDER; i < A->dim_x - STENCIL_ORDER; ++i) {
         for (j = STENCIL_ORDER; j < A->dim_y - STENCIL_ORDER; ++j) {
             for (k = STENCIL_ORDER; k < A->dim_z - STENCIL_ORDER; ++k) {
-                __m256d acc = _mm256_setzero_pd();
+                //__m256d acc = _mm256_setzero_pd();
 
                 __m256d self_val_A = _mm256_broadcast_sd(&A->values[i][j][k]);
                 __m256d self_val_B = _mm256_broadcast_sd(&B->values[i][j][k]);
                 __m256d product = _mm256_mul_pd(self_val_A, self_val_B);
-                acc = _mm256_add_pd(acc, product);
+                //acc = _mm256_add_pd(acc, product);
 
                 for (o = 1; o <= STENCIL_ORDER; ++o) {
                     double factor = powers[o-1];
@@ -189,6 +189,13 @@ void solve_jacobi(mesh_t *A, const mesh_t *B, mesh_t *C) {
                     __m256d mul1 = _mm256_mul_pd(A1, B1);
                     __m256d mul2 = _mm256_mul_pd(A2, B2);
                     __m256d mul3 = _mm256_mul_pd(A3, B3);
+
+                    __m256d factor_vec = _mm256_broadcast_sd(&factor);
+
+                    mul1 = _mm256_mul_pd(mul1, factor_vec);
+                    mul2 = _mm256_mul_pd(mul2, factor_vec);
+                    mul3 = _mm256_mul_pd(mul3, factor_vec); 
+
 /*
                     // NOTE: We can HADD this way if we store each neighbour in the same 
                     // vector for each low and high 128-bits separately, 
@@ -212,14 +219,13 @@ void solve_jacobi(mesh_t *A, const mesh_t *B, mesh_t *C) {
                     __m256d sum1 = _mm256_add_pd(mul1, mul2);
                     __m256d total_sum = _mm256_add_pd(sum1, mul3);
 
-                    __m256d factor_vec = _mm256_broadcast_sd(&factor);
-                    __m256d contributions = _mm256_mul_pd(total_sum, factor_vec);
-                    acc = _mm256_add_pd(acc, contributions);
+                    //__m256d contributions = _mm256_mul_pd(total_sum, factor_vec); //faire mul1 * fac_vec etc avant de passer au somme
+                    product = _mm256_add_pd(product, total_sum);
                 }
-
-                double result;
-                _mm256_store_pd(&result, acc);
-                C->values[i][j][k] = result;
+                f64 tmp[4];
+                _mm256_storeu_pd(tmp, product);
+                C->values[i][j][k] = tmp[3] ;
+                //C->values[i][j][k] = result;
             }
         }
     }
