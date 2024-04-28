@@ -31,30 +31,30 @@ typedef enum mesh_kind_e
 /// Storage of cells is in layout right (aka RowMajor)
 typedef struct mesh_s
 {
+  f64 ***values;
   usz dim_x;
   usz dim_y;
   usz dim_z;
   // cell_t cells;
-  f64 ***values;
   // cell_kind_t ***cells_kind;
   mesh_kind_t mesh_kind;
 } /* __attribute__((packed)) */ mesh_t;
 
 /// Initialize a mesh.
-mesh_t mesh_new (usz dim_x, usz dim_y, usz dim_z, mesh_kind_t kind);
-
+/* mesh_t mesh_new (usz dim_x, usz dim_y, usz dim_z, mesh_kind_t kind);
+ */
 /// De-initialize a mesh.
 void mesh_drop (mesh_t *self);
 
 /// Prints a mesh.
-void mesh_print (mesh_t const *self, char const *name);
-
+/* void mesh_print (mesh_t const *self, char const *name);
+ */
 /// Gets the kind of a cell in a mesh given its coordinates.
 // cell_kind_t mesh_set_cell_kind (mesh_t const *self, usz i, usz j, usz k);
 
 /// Copies the inner part of a mesh into another.
-void mesh_copy_core (mesh_t *dst, mesh_t const *src);
-
+/* void mesh_copy_core (mesh_t *dst, mesh_t const *src);
+ */
 /// Returns a pointer to the indexed element (includes surrounding ghost
 /// cells).
 /* f64* idx(mesh_t* self, usz i, usz j, usz k);

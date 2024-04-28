@@ -6,13 +6,14 @@
 #include "stencil/mesh.h"
 #include "stencil/solve.h"
 
-#include <mpi.h>
 #include <math.h>
+#include <mpi.h>
 #include <stdio.h>
 
 static char *DEFAULT_CONFIG_PATH = "config.txt";
 static char *DEFAULT_OUTPUT_PATH = NULL;
 
+//
 static void
 save_results (FILE ofp[static 1], config_t const *cfg, mesh_t const *mesh,
               comm_handler_t const *comm_handler, duration_t elapsed)
@@ -64,14 +65,6 @@ save_results (FILE ofp[static 1], config_t const *cfg, mesh_t const *mesh,
                cfg->dim_z);
     }
 }
-
-/* printf("=== Base Sizes ===\n");
-    printf("cell_kind_t     : %ld\n", sizeof(cell_kind_t));
-    printf("cell_t          : %ld\n", sizeof(cell_t));
-    printf("mesh_kind_t     : %ld\n", sizeof(mesh_kind_t));
-    printf("mesh_t          : %ld\n", sizeof(mesh_t));
-    printf("comm_kind_t     : %ld\n", sizeof(comm_kind_t));
-    printf("comm_handler_t  : %ld\n", sizeof(comm_handler_t)); */
 
 //
 i32
@@ -133,24 +126,34 @@ main (i32 argc, char *argv[argc + 1])
   comm_handler_print (&comm_handler);
 #endif
 
-  mesh_t A = mesh_new (comm_handler.loc_dim_x, comm_handler.loc_dim_y,
-                       comm_handler.loc_dim_z, MESH_KIND_INPUT);
+  /* mesh_t A = mesh_new (comm_handler.loc_dim_x, comm_handler.loc_dim_y,
+                       comm_handler.loc_dim_z, MESH_KIND_OUTPUT);
 
   mesh_t B = mesh_new (comm_handler.loc_dim_x, comm_handler.loc_dim_y,
                        comm_handler.loc_dim_z, MESH_KIND_CONSTANT);
 
   mesh_t C = mesh_new (comm_handler.loc_dim_x, comm_handler.loc_dim_y,
-                       comm_handler.loc_dim_z, MESH_KIND_OUTPUT);
+                       comm_handler.loc_dim_z, MESH_KIND_INPUT); */
 
-  init_meshes (&A, &B, &C, &comm_handler);
+  usz dim_x = comm_handler.loc_dim_x;
+  usz dim_y = comm_handler.loc_dim_y;
+  usz dim_z = comm_handler.loc_dim_z;
 
-  // Exchange ghost cells to make sure data is properly initialized everywhere
+  mesh_t A = mesh_new_2 (dim_x, dim_y, dim_z, MESH_KIND_OUTPUT, &comm_handler);
+  mesh_t B
+      = mesh_new_2 (dim_x, dim_y, dim_z, MESH_KIND_CONSTANT, &comm_handler);
+  mesh_t C = mesh_new_2 (dim_x, dim_y, dim_z, MESH_KIND_INPUT, &comm_handler);
+
+  // init_meshes (&A, &B, &C, &comm_handler);
+
+  // Exchange ghost cells to make sure data is properly initialized
+  // everywhere
   comm_handler_ghost_exchange (&comm_handler, &A);
   comm_handler_ghost_exchange (&comm_handler, &B);
   comm_handler_ghost_exchange (&comm_handler, &C);
 
   // NOTE : Unrolled && Precomputed
-  f64 pow_precomputed[STENCIL_ORDER];
+  f64 pow_precomputed[STENCIL_ORDER] __attribute__((aligned(32)));
   for (usz o = 1; o <= STENCIL_ORDER; o += 4)
     {
       *(pow_precomputed + (o - 1)) = (1.0 / pow (17.0, (f64)(o)));
@@ -181,8 +184,8 @@ main (i32 argc, char *argv[argc + 1])
       chrono_start (&chrono);
 
       // Compute Jacobi C=B@A (one iteration)
-      solve_jacobi_2 (&A, &B, &C, pow_precomputed);
-
+      // solve_jacobi_2 (&A, &B, &C, pow_precomputed);
+      solve_jacobi_3 (&A, &B, &C, pow_precomputed);
       // Exchange ghost cells for A and C meshes
       // No need to exchange B as its a constant mesh
       comm_handler_ghost_exchange (&comm_handler, &A);
@@ -192,7 +195,7 @@ main (i32 argc, char *argv[argc + 1])
 
       duration_t elapsed = chrono_elapsed (chrono);
 
-      save_results (ofp, &cfg, &A, &comm_handler, elapsed);
+      save_results (ofp, &cfg, &C, &comm_handler, elapsed);
     }
 
   mesh_drop (&A);

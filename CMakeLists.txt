@@ -5,7 +5,7 @@ set(CMAKE_COLOR_DIAGNOSTICS ON)
 set(CMAKE_C_STANDARD 17)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-    add_compile_options(-Wall -g -O3 -march=native)
+    add_compile_options(-Wall -g3 -O0 -march=native)
 endif()
 
 # MPI Setup
@@ -17,7 +17,8 @@ if(MPI_FOUND)
     set(CMAKE_C_COMPILER ${MPI_C_COMPILER})
 endif()
 
-find_package(BLAS REQUIRED)
+find_package(OpenMP REQUIRED) 
+#find_package(BLAS REQUIRED)
 
 
 # Print the compiler being used
@@ -31,6 +32,6 @@ add_subdirectory(src)
 
 add_executable(top-stencil src/main.c)
 
-target_include_directories(top-stencil PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(top-stencil PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include )
 
-target_link_libraries(top-stencil PRIVATE stencil::stencil stencil::utils)
+target_link_libraries(top-stencil PRIVATE stencil::stencil stencil::utils MPI::MPI_C)

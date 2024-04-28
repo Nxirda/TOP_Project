@@ -15,6 +15,7 @@ target_link_libraries(stencil
                         ${MPI_C_LIBRARIES}
                         m 
                         ${BLAS_LIBRARIES}
+                        OpenMP::OpenMP_C
                         )
 
 #)
