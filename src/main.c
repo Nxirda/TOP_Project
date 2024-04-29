@@ -122,19 +122,19 @@ main (i32 argc, char *argv[argc + 1])
   comm_handler_t comm_handler = comm_handler_new (
       (u32)rank, (u32)comm_size, cfg.dim_x, cfg.dim_y, cfg.dim_z);
 
+  // NOTE : Unrolled && Precomputed
+  f64 pow_precomputed[STENCIL_ORDER] __attribute__ ((aligned (32)));
+  for (usz o = 1; o <= STENCIL_ORDER; o += 4)
+    {
+      *(pow_precomputed + (o - 1)) = (1.0 / pow (17.0, (f64)(o)));
+      *(pow_precomputed + (o)) = (1.0 / pow (17.0, (f64)(o + 1)));
+      *(pow_precomputed + (o + 1)) = (1.0 / pow (17.0, (f64)(o + 2)));
+      *(pow_precomputed + (o + 2)) = (1.0 / pow (17.0, (f64)(o + 3)));
+    }
+
 #ifndef NDEBUG
   comm_handler_print (&comm_handler);
 #endif
-
-  /* mesh_t A = mesh_new (comm_handler.loc_dim_x, comm_handler.loc_dim_y,
-                       comm_handler.loc_dim_z, MESH_KIND_OUTPUT);
-
-  mesh_t B = mesh_new (comm_handler.loc_dim_x, comm_handler.loc_dim_y,
-                       comm_handler.loc_dim_z, MESH_KIND_CONSTANT);
-
-  mesh_t C = mesh_new (comm_handler.loc_dim_x, comm_handler.loc_dim_y,
-                       comm_handler.loc_dim_z, MESH_KIND_INPUT); */
-
   usz dim_x = comm_handler.loc_dim_x;
   usz dim_y = comm_handler.loc_dim_y;
   usz dim_z = comm_handler.loc_dim_z;
@@ -144,23 +144,11 @@ main (i32 argc, char *argv[argc + 1])
       = mesh_new_2 (dim_x, dim_y, dim_z, MESH_KIND_CONSTANT, &comm_handler);
   mesh_t C = mesh_new_2 (dim_x, dim_y, dim_z, MESH_KIND_INPUT, &comm_handler);
 
-  // init_meshes (&A, &B, &C, &comm_handler);
-
   // Exchange ghost cells to make sure data is properly initialized
   // everywhere
-  //comm_handler_ghost_exchange (&comm_handler, &A);
+  // comm_handler_ghost_exchange (&comm_handler, &A);
   comm_handler_ghost_exchange (&comm_handler, &B);
   comm_handler_ghost_exchange (&comm_handler, &C);
-
-  // NOTE : Unrolled && Precomputed
-  f64 pow_precomputed[STENCIL_ORDER] __attribute__((aligned(32)));
-  for (usz o = 1; o <= STENCIL_ORDER; o += 4)
-    {
-      *(pow_precomputed + (o - 1)) = (1.0 / pow (17.0, (f64)(o)));
-      *(pow_precomputed + (o)) = (1.0 / pow (17.0, (f64)(o + 1)));
-      *(pow_precomputed + (o + 1)) = (1.0 / pow (17.0, (f64)(o + 2)));
-      *(pow_precomputed + (o + 2)) = (1.0 / pow (17.0, (f64)(o + 3)));
-    }
 
   chrono_t chrono;
 
@@ -170,33 +158,46 @@ main (i32 argc, char *argv[argc + 1])
       fprintf (stderr, "****************************************\n");
     }
 #endif
-
-  for (usz it = 0; it < cfg.niter; ++it)
-    {
+#pragma omp parallel
+  {
+    for (usz it = 0; it < cfg.niter; ++it)
+      {
 
 #ifndef NDEBUG
-      if (rank == 0)
-        {
-          fprintf (stderr, "Iteration #%2zu/%2zu\r", it + 1, cfg.niter);
-        }
+        if (rank == 0)
+          {
+            fprintf (stderr, "Iteration #%2zu/%2zu\r", it + 1, cfg.niter);
+          }
 #endif
 
-      chrono_start (&chrono);
+#pragma omp master
+        {
+          chrono_start (&chrono);
+        }
 
-      // Compute Jacobi C=B@A (one iteration)
-      // solve_jacobi_2 (&A, &B, &C, pow_precomputed);
-      solve_jacobi_3 (&A, &B, &C, pow_precomputed);
-      // Exchange ghost cells for A and C meshes
-      // No need to exchange B as its a constant mesh
-      //comm_handler_ghost_exchange (&comm_handler, &A);
-      comm_handler_ghost_exchange (&comm_handler, &C);
+        elementwise_multiply (&A, &B, &C);
+        // Compute Jacobi C=B@A (one iteration)
+        solve_jacobi (&A, &B, &C, pow_precomputed);
 
-      chrono_stop (&chrono);
+// Exchange ghost cells for C meshes
+// No need to exchange A as its specific to a process
+// No need to exchange B as its a constant mesh
+/* #pragma omp single
+        { */
+          comm_handler_ghost_exchange (&comm_handler, &C);
+        //}
 
-      duration_t elapsed = chrono_elapsed (chrono);
+#pragma omp master
+        {
 
-      save_results (ofp, &cfg, &C, &comm_handler, elapsed);
-    }
+          chrono_stop (&chrono);
+
+          duration_t elapsed = chrono_elapsed (chrono);
+
+          save_results (ofp, &cfg, &C, &comm_handler, elapsed);
+        }
+      }
+  }
 
   mesh_drop (&A);
   mesh_drop (&B);

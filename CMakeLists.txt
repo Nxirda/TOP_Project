@@ -7,7 +7,7 @@ set(CMAKE_C_STANDARD 17)
 if(CMAKE_BUILD_TYPE MATCHES Debug)
     add_compile_options(-Wall -g3 -O0 -march=native)
 else()
-    add_compile_options(-O3 -march=native -funroll-loops)
+    add_compile_options(-O3 -march=native -funroll-loops -DNDEBUG)
 endif()
 
 # MPI Setup
@@ -20,15 +20,10 @@ if(MPI_FOUND)
 endif()
 
 find_package(OpenMP REQUIRED) 
-#find_package(BLAS REQUIRED)
-
 
 # Print the compiler being used
 message("Compiler   : ${CMAKE_C_COMPILER}")
 message("Build type : ${CMAKE_BUILD_TYPE}")
-
-# Open MP setup
-#find_package(OpenMP REQUIRED)
 
 add_subdirectory(src)
 

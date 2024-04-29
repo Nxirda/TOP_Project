@@ -40,14 +40,6 @@ typedef struct comm_handler_s
   i32 id_left;
   /// Rank of the right neighboor process, -1 if none.
   i32 id_right;
-  /// Rank of the top neighboor process, -1 if none.
-  /*  i32 id_top;
-   /// Rank of the bottom neighboor process, -1 if none.
-   i32 id_bottom;
-   /// Rank of the back neighboor process, -1 if none.
-   i32 id_back;
-   /// Rank of the front neighboor process, -1 if none.
-   i32 id_front; */
 } __attribute__ ((packed)) comm_handler_t;
 
 comm_handler_t comm_handler_new (u32 rank, u32 comm_size, usz dim_x, usz dim_y,

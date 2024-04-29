@@ -15,49 +15,6 @@ compute_core_pressure (usz i, usz j, usz k)
   return sin ((f64)k * cos ((f64)i + 0.311) * cos ((f64)j + 0.817) + 0.613);
 }
 
-//
-/* static void
-setup_mesh_cell_values (mesh_t *mesh, comm_handler_t const *comm_handler)
-{
-  //#pragma omp parallel for
-  for (usz i = 0; i < mesh->dim_x; ++i)
-    {
-      for (usz j = 0; j < mesh->dim_y; ++j)
-        {
-          for (usz k = 0; k < mesh->dim_z; ++k)
-            {
-              switch (mesh->mesh_kind)
-                {
-                case MESH_KIND_CONSTANT:
-                  mesh->values[i][j][k] = compute_core_pressure (
-                      comm_handler->coord_x + i, comm_handler->coord_y + j,
-                      comm_handler->coord_z + k);
-                  break;
-                case MESH_KIND_INPUT:
-                  if ((i >= STENCIL_ORDER && (i < mesh->dim_x - STENCIL_ORDER))
-                      && (j >= STENCIL_ORDER
-                          && (j < mesh->dim_y - STENCIL_ORDER))
-                      && (k >= STENCIL_ORDER
-                          && (k < mesh->dim_z - STENCIL_ORDER)))
-                    {
-                      mesh->values[i][j][k] = 1.0;
-                    }
-                  else
-                    {
-                      mesh->values[i][j][k] = 0.0;
-                    }
-                  break;
-                case MESH_KIND_OUTPUT:
-                  mesh->values[i][j][k] = 0.0;
-                  break;
-                default:
-                  __builtin_unreachable ();
-                }
-            }
-        }
-    }
-} */
-
 mesh_t
 mesh_new_2 (usz base_dim_x, usz base_dim_y, usz base_dim_z, mesh_kind_t kind,
             comm_handler_t const *comm_handler)
@@ -74,7 +31,7 @@ mesh_new_2 (usz base_dim_x, usz base_dim_y, usz base_dim_z, mesh_kind_t kind,
       error ("failed to allocate dimension X of mesh of size %zu bytes",
              dim_x);
     }
-#pragma omp parallel for schedule(static, 8)
+#pragma omp /* parallel  */for schedule(static, 8)
   for (usz i = 0; i < dim_x; ++i)
     {
       values[i] = (f64 **)malloc (dim_y * sizeof (f64 *));
