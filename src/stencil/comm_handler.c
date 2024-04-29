@@ -9,7 +9,7 @@
 // 8UL
 
 //
-static u32
+/* static u32
 gcd (u32 a, u32 b)
 {
   u32 c;
@@ -20,7 +20,7 @@ gcd (u32 a, u32 b)
       b = c;
     }
   return a;
-}
+} */
 
 //
 static char *
@@ -69,7 +69,7 @@ comm_handler_new (u32 rank, u32 comm_size, usz dim_x, usz dim_y, usz dim_z)
   usz const loc_dim_x
       = (rank == nb_x - 1) ? dim_x / nb_x + dim_x % nb_x : dim_x / nb_x;
 
-  // Setup position 
+  // Setup position
   u32 const coord_z = 0; /* rank_z * (u32)dim_z / nb_z; */
   u32 const coord_y = 0; // rank_y * (u32)dim_y / nb_y; */
   u32 const coord_x = rank * ((u32)dim_x / nb_x);
@@ -137,7 +137,7 @@ comm_handler_print (comm_handler_t const *self)
 }
 
 // Actual only communication we need
-static void
+/* static void
 ghost_exchange_left_right (comm_handler_t const *self, mesh_t *mesh,
                            comm_kind_t comm_kind, i32 target, usz x_start)
 {
@@ -168,17 +168,20 @@ ghost_exchange_left_right (comm_handler_t const *self, mesh_t *mesh,
             }
         }
     }
-}
+} */
 
 static void
 send_receive (comm_handler_t const *self, mesh_t *mesh, comm_kind_t comm_kind,
-              i32 target, usz x_start)
+              i32 target, usz x_start, MPI_Request *requests, usz *request_index)
 {
+  /* usz test = STENCIL_ORDER * mesh->dim_y;
+  MPI_Request requests[test]; */
   if (target < 0)
     {
       return;
     }
   // usz i = x_start;
+  usz req = 0;
   for (usz i = x_start; i < x_start + STENCIL_ORDER; ++i)
     {
       for (usz j = 0; j < mesh->dim_y; ++j)
@@ -188,100 +191,26 @@ send_receive (comm_handler_t const *self, mesh_t *mesh, comm_kind_t comm_kind,
           switch (comm_kind)
             {
             case COMM_KIND_SEND_OP:
-              MPI_Send (&mesh->values[i][j][0], mesh->dim_z, MPI_DOUBLE, target, 0,
-                        MPI_COMM_WORLD);
+              MPI_Isend (&mesh->values[i][j][0], mesh->dim_z, MPI_DOUBLE,
+                         target, 0, MPI_COMM_WORLD, &requests[(*request_index)]);
               break;
             case COMM_KIND_RECV_OP:
-              MPI_Recv (&mesh->values[i][j][0], mesh->dim_z, MPI_DOUBLE, target, 0,
-                        MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+              MPI_Irecv (&mesh->values[i][j][0], mesh->dim_z, MPI_DOUBLE,
+                         target, 0, MPI_COMM_WORLD,
+                         &requests[(*request_index)] /* MPI_STATUS_IGNORE */);
               break;
             default:
               __builtin_unreachable ();
             }
           //}
+          (*request_index)++;
         }
     }
+
+ /*  MPI_Status status[req];
+
+  MPI_Waitall (test, requests, status); */
 }
-
-/* static void
-ghost_exchange_top_bottom (comm_handler_t const *self, mesh_t *mesh,
-                           comm_kind_t comm_kind, i32 target, usz y_start)
-{
-  if (target < 0)
-    {
-      return;
-    }
-
-  for (usz i = 0; i < mesh->dim_x; ++i)
-    {
-      for (usz j = y_start; j < y_start + STENCIL_ORDER; ++j)
-        {
-          for (usz k = 0; k < mesh->dim_z; ++k)
-            {
-              switch (comm_kind)
-                {
-                case COMM_KIND_SEND_OP:
-                  MPI_Send (&mesh->values[i][j][k], 1, MPI_DOUBLE, target, 0,
-                            MPI_COMM_WORLD);
-                  break;
-                case COMM_KIND_RECV_OP:
-                  MPI_Recv (&mesh->values[i][j][k], 1, MPI_DOUBLE, target, 0,
-                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                  break;
-                default:
-                  __builtin_unreachable ();
-                }
-            }
-        }
-    }
-} */
-
-/* static void
-ghost_exchange_front_back (comm_handler_t const *self, mesh_t *mesh,
-                           comm_kind_t comm_kind, i32 target, usz z_start)
-{
-  if (target < 0)
-    {
-      return;
-    }
-
-  for (usz i = 0; i < mesh->dim_x; ++i)
-    {
-      for (usz j = 0; j < mesh->dim_y; ++j)
-        {
-          for (usz k = z_start; k < z_start + STENCIL_ORDER; ++k)
-            {
-              switch (comm_kind)
-                {
-                case COMM_KIND_SEND_OP:
-                  MPI_Send (&mesh->values[i][j][k], 1, MPI_DOUBLE, target, 0,
-                            MPI_COMM_WORLD);
-                  break;
-                case COMM_KIND_RECV_OP:
-                  MPI_Recv (&mesh->values[i][j][k], 1, MPI_DOUBLE, target, 0,
-                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                  break;
-                default:
-                  __builtin_unreachable ();
-                }
-            }
-        }
-    }
-} */
-
-/*
-// Prints sleep if called with Please
-
-#define catof(a, b, c, d, e, f) e##b##c##c##a
-
-#define __builtin_sync_proc(_) catof(p, l, e, a, s, e)(1)
-
-static i32 MPI_Syncall_callback(MPI_Comm comm) {
-    return (i32)__builtin_sync_proc(comm);
-}
-
-static MPI_Syncfunc_t* MPI_Syncall = MPI_Syncall_callback;
-*/
 
 // NOTE : Inverted sends and receives. Not optimal but will do the trick for
 // now
@@ -289,11 +218,19 @@ void
 comm_handler_ghost_exchange (comm_handler_t const *self, mesh_t *mesh)
 {
 
-  send_receive (self, mesh, COMM_KIND_RECV_OP, self->id_left, 0);
-  send_receive (self, mesh, COMM_KIND_SEND_OP, self->id_right,
-                mesh->dim_x - (2 * STENCIL_ORDER));
+  // 4 because we do 4 send/recv
+  MPI_Request requests[4 * STENCIL_ORDER * mesh->dim_y];
+  usz req_idx = 0;
 
-  send_receive (self, mesh, COMM_KIND_RECV_OP, self->id_right, mesh->dim_x - STENCIL_ORDER);
-  send_receive (self, mesh, COMM_KIND_SEND_OP, self->id_left,
-                STENCIL_ORDER);
+  send_receive (self, mesh, COMM_KIND_RECV_OP, self->id_left, 0, requests, &req_idx);
+  send_receive (self, mesh, COMM_KIND_SEND_OP, self->id_left, STENCIL_ORDER, requests, &req_idx);
+
+  send_receive (self, mesh, COMM_KIND_SEND_OP, self->id_right,
+                mesh->dim_x - (2 * STENCIL_ORDER), requests, &req_idx);
+  send_receive (self, mesh, COMM_KIND_RECV_OP, self->id_right,
+                mesh->dim_x - STENCIL_ORDER, requests, &req_idx);
+
+  MPI_Status status[req_idx];
+  MPI_Waitall(req_idx, requests, status);
+  // MPI_Barrier(MPI_COMM_WORLD);
 }
