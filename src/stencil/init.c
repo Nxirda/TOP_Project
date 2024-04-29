@@ -74,7 +74,7 @@ mesh_new_2 (usz base_dim_x, usz base_dim_y, usz base_dim_z, mesh_kind_t kind,
       error ("failed to allocate dimension X of mesh of size %zu bytes",
              dim_x);
     }
-#pragma omp parallel for
+#pragma omp parallel for schedule(static, 8)
   for (usz i = 0; i < dim_x; ++i)
     {
       values[i] = (f64 **)malloc (dim_y * sizeof (f64 *));
@@ -86,7 +86,7 @@ mesh_new_2 (usz base_dim_x, usz base_dim_y, usz base_dim_z, mesh_kind_t kind,
         }
       for (usz j = 0; j < dim_y; ++j)
         {
-          values[i][j] = (f64 *)malloc (dim_z * sizeof (f64));
+          values[i][j] = (f64 *)aligned_alloc (32 , dim_z * sizeof (f64));
           // A->values[i][j] = (f64 *)malloc (A->dim_z * sizeof (f64));
           if (NULL == values[i][j])
             {
@@ -130,7 +130,7 @@ mesh_new_2 (usz base_dim_x, usz base_dim_y, usz base_dim_z, mesh_kind_t kind,
     .dim_y = dim_y,
     .dim_z = dim_z,
     .values = values,
-    .mesh_kind = kind,
+    /* .mesh_kind = kind, */
   };
 }
 

@@ -37,7 +37,7 @@ typedef struct mesh_s
   usz dim_z;
   // cell_t cells;
   // cell_kind_t ***cells_kind;
-  mesh_kind_t mesh_kind;
+  /* mesh_kind_t mesh_kind; */
 } /* __attribute__((packed)) */ mesh_t;
 
 /// Initialize a mesh.

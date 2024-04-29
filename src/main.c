@@ -148,7 +148,7 @@ main (i32 argc, char *argv[argc + 1])
 
   // Exchange ghost cells to make sure data is properly initialized
   // everywhere
-  comm_handler_ghost_exchange (&comm_handler, &A);
+  //comm_handler_ghost_exchange (&comm_handler, &A);
   comm_handler_ghost_exchange (&comm_handler, &B);
   comm_handler_ghost_exchange (&comm_handler, &C);
 
@@ -188,7 +188,7 @@ main (i32 argc, char *argv[argc + 1])
       solve_jacobi_3 (&A, &B, &C, pow_precomputed);
       // Exchange ghost cells for A and C meshes
       // No need to exchange B as its a constant mesh
-      comm_handler_ghost_exchange (&comm_handler, &A);
+      //comm_handler_ghost_exchange (&comm_handler, &A);
       comm_handler_ghost_exchange (&comm_handler, &C);
 
       chrono_stop (&chrono);

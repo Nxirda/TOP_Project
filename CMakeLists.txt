@@ -6,6 +6,8 @@ set(CMAKE_C_STANDARD 17)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
     add_compile_options(-Wall -g3 -O0 -march=native)
+else()
+    add_compile_options(-O3 -march=native -funroll-loops)
 endif()
 
 # MPI Setup
