@@ -101,7 +101,7 @@ send_receive (comm_handler_t const *self, mesh_t *mesh, comm_kind_t comm_kind,
       for (usz j = 0; j < mesh->dim_y; ++j)
         {
 
-          req ++;
+          req++;
 
           switch (comm_kind)
             {
@@ -118,6 +118,7 @@ send_receive (comm_handler_t const *self, mesh_t *mesh, comm_kind_t comm_kind,
             default:
               __builtin_unreachable ();
             }
+#pragma omp atomic
           (*request_index)++;
         }
     }
@@ -128,34 +129,25 @@ void
 comm_handler_ghost_exchange (comm_handler_t const *self, mesh_t *mesh)
 {
 
-  // 4 because we do 4 send/recv
-  MPI_Request requests[4 * STENCIL_ORDER * mesh->dim_y];
-  MPI_Status status[4 * STENCIL_ORDER * mesh->dim_y];
-  usz req_idx = 0;
-
-#pragma omp task
+#pragma omp single nowait
   {
-  send_receive (self, mesh, COMM_KIND_RECV_OP, self->id_left, 0, requests,
-                &req_idx);
+    // 4 because we do 4 send/recv
+    MPI_Request requests[4 * STENCIL_ORDER * mesh->dim_y];
+    MPI_Status status[4 * STENCIL_ORDER * mesh->dim_y];
+    usz req_idx = 0;
+
+    send_receive (self, mesh, COMM_KIND_RECV_OP, self->id_left, 0, requests,
+                  &req_idx);
+
+    send_receive (self, mesh, COMM_KIND_SEND_OP, self->id_left, STENCIL_ORDER,
+                  requests, &req_idx);
+
+    send_receive (self, mesh, COMM_KIND_SEND_OP, self->id_right,
+                  mesh->dim_x - (2 * STENCIL_ORDER), requests, &req_idx);
+
+    send_receive (self, mesh, COMM_KIND_RECV_OP, self->id_right,
+                  mesh->dim_x - STENCIL_ORDER, requests, &req_idx);
+
+    MPI_Waitall (req_idx, requests, status);
   }
-
-#pragma omp task
-{
-  send_receive (self, mesh, COMM_KIND_SEND_OP, self->id_left, STENCIL_ORDER,
-                requests, &req_idx);
-}
-
-#pragma omp task
-{
-  send_receive (self, mesh, COMM_KIND_SEND_OP, self->id_right,
-                mesh->dim_x - (2 * STENCIL_ORDER), requests, &req_idx);
-}
-#pragma omp task
-{
-  send_receive (self, mesh, COMM_KIND_RECV_OP, self->id_right,
-                mesh->dim_x - STENCIL_ORDER, requests, &req_idx);
-}
-#pragma omp taskwait
-
-  MPI_Waitall (req_idx, requests, status);
 }

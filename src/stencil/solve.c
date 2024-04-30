@@ -21,7 +21,7 @@ elementwise_multiply (mesh_t *A, mesh_t const *B, mesh_t const *C)
     {
       for (j = 0; j < C->dim_y; j++)
         {
-          for (usz k = 0; k < lim_z; k += UNROLL_FACTOR)
+          for (k = 0; k < lim_z; k += UNROLL_FACTOR)
             {
               usz _k4_ = k + 4;
               usz _k8_ = k + 8;

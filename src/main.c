@@ -179,13 +179,14 @@ main (i32 argc, char *argv[argc + 1])
         // Compute Jacobi C=B@A (one iteration)
         solve_jacobi (&A, &B, &C, pow_precomputed);
 
-// Exchange ghost cells for C meshes
-// No need to exchange A as its specific to a process
-// No need to exchange B as its a constant mesh
-/* #pragma omp single
-        { */
-          comm_handler_ghost_exchange (&comm_handler, &C);
+        // Exchange ghost cells for C meshes
+        // No need to exchange A as its specific to a process
+        // No need to exchange B as its a constant mesh
+        /* #pragma omp single
+                { */
+        comm_handler_ghost_exchange (&comm_handler, &C);
         //}
+#pragma omp barrier
 
 #pragma omp master
         {

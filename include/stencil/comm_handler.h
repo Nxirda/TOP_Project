@@ -12,8 +12,6 @@ typedef enum comm_kind_e
   COMM_KIND_RECV_OP,
 } __attribute__ ((packed)) comm_kind_t;
 
-// typedef int MPI_Syncfunc_t(MPI_Comm);
-
 /// Handler for MPI communications between neighboor processes (ghost cell
 /// exchanges).
 typedef struct comm_handler_s
