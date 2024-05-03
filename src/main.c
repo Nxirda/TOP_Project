@@ -56,10 +56,15 @@ save_results (FILE ofp[static 1], config_t const *cfg, mesh_t const *mesh,
 
   if (mid_x_is_in && mid_y_is_in && mid_z_is_in)
     {
+      // f64 ***mesh_values = (f64 ***)mesh->values;
+      usz dim_y = mesh->dim_y;
+      usz dim_z = mesh->dim_z;
+      f64 (*mesh_values)[dim_y][dim_z] = (f64 (*)[dim_y][dim_z])mesh->values;
+
       fprintf (ofp, "%+18.15lf %12.9lf %12.3lf %zu %zu %zu\n",
-               mesh->values[mid_x - comm_handler->coord_x + STENCIL_ORDER]
-                           [mid_y - comm_handler->coord_y + STENCIL_ORDER]
-                           [mid_z - comm_handler->coord_z + STENCIL_ORDER],
+               mesh_values[mid_x - comm_handler->coord_x + STENCIL_ORDER]
+                          [mid_y - comm_handler->coord_y + STENCIL_ORDER]
+                          [mid_z - comm_handler->coord_z + STENCIL_ORDER],
                glob_elapsed_s / (f64)comm_size,
                glob_ns_per_elem / (f64)comm_size, cfg->dim_x, cfg->dim_y,
                cfg->dim_z);
@@ -80,6 +85,11 @@ main (i32 argc, char *argv[argc + 1])
 
   char *config_path;
   char *output_path;
+  
+  usz BLOCK_SIZE_X = 128;
+  usz BLOCK_SIZE_Y = 128;
+  usz BLOCK_SIZE_Z = 128;
+  
   if (2 == argc)
     {
       config_path = argv[1];
@@ -90,11 +100,20 @@ main (i32 argc, char *argv[argc + 1])
       config_path = argv[1];
       output_path = argv[2];
     }
+  else if(6 == argc)
+    {
+      config_path = argv[1];
+      output_path = argv[2];
+      BLOCK_SIZE_X = atoi(argv[3]);
+      BLOCK_SIZE_Y = atoi(argv[4]);
+      BLOCK_SIZE_Z = atoi(argv[5]);
+    }
   else
     {
       config_path = DEFAULT_CONFIG_PATH;
       output_path = DEFAULT_OUTPUT_PATH;
     }
+
 
   config_t cfg = config_parse_from_file (config_path);
 
@@ -132,6 +151,7 @@ main (i32 argc, char *argv[argc + 1])
       *(pow_precomputed + (o + 2)) = (1.0 / pow (17.0, (f64)(o + 3)));
     }
 
+
 #ifndef NDEBUG
   comm_handler_print (&comm_handler);
 #endif
@@ -146,7 +166,6 @@ main (i32 argc, char *argv[argc + 1])
 
   // Exchange ghost cells to make sure data is properly initialized
   // everywhere
-  // comm_handler_ghost_exchange (&comm_handler, &A);
   comm_handler_ghost_exchange (&comm_handler, &B);
   comm_handler_ghost_exchange (&comm_handler, &C);
 
@@ -160,6 +179,10 @@ main (i32 argc, char *argv[argc + 1])
 #endif
 #pragma omp parallel
   {
+    /*  f64 (*A_Matrix)[dim_y][dim_z] = (f64 (*)[dim_y][dim_z])A.values;
+     f64 (*B_Matrix)[dim_y][dim_z] = (f64 (*)[dim_y][dim_z])B.values;
+     f64 (*C_Matrix)[dim_y][dim_z] = (f64 (*)[dim_y][dim_z])C.values; */
+
     for (usz it = 0; it < cfg.niter; ++it)
       {
 
@@ -176,15 +199,15 @@ main (i32 argc, char *argv[argc + 1])
         }
 
         elementwise_multiply (&A, &B, &C);
-        // Compute Jacobi C=B@A (one iteration)
-        solve_jacobi (&A, &B, &C, pow_precomputed);
+        //   Compute Jacobi C=B@A (one iteration)
+        solve_jacobi (&A, &C, pow_precomputed, BLOCK_SIZE_X, BLOCK_SIZE_Y, BLOCK_SIZE_Z);
 
         // Exchange ghost cells for C meshes
         // No need to exchange A as its specific to a process
         // No need to exchange B as its a constant mesh
-        /* #pragma omp single
-                { */
-        comm_handler_ghost_exchange (&comm_handler, &C);
+/* #pragma omp single
+        { */
+          comm_handler_ghost_exchange (&comm_handler, &C);
         //}
 #pragma omp barrier
 

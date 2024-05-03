@@ -4,6 +4,9 @@
 
 #define STENCIL_ORDER 8UL
 
+// S/o gabriel
+#define make_3dspan(type, attr, ptr, dim2, dim3) (type (*)[dim2][dim3]) (ptr)
+
 //
 typedef enum mesh_kind_e
 {
@@ -16,7 +19,7 @@ typedef enum mesh_kind_e
 /// Storage of cells is in layout right (aka RowMajor)
 typedef struct mesh_s
 {
-  f64 ***values;
+  f64 *values;
   usz dim_x;
   usz dim_y;
   usz dim_z;

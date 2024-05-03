@@ -63,3 +63,7 @@ bench_config.txt
 results/
 temp/
 .vscode
+scripts/TOP/
+scripts/__pycache__
+scripts/study_results.data
+Notes.md

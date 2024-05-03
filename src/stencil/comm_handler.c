@@ -2,19 +2,12 @@
 
 #include "logging.h"
 
+#include <mpi.h>
 #include <omp.h>
 #include <stdio.h>
 #include <unistd.h>
 
 #define MAXLEN 12UL // Right max size for i32
-
-//
-static char *
-stringify (char buf[static MAXLEN], i32 num)
-{
-  snprintf (buf, MAXLEN, "%d", num);
-  return buf;
-}
 
 //
 comm_handler_t
@@ -68,58 +61,49 @@ comm_handler_print (comm_handler_t const *self)
 {
   i32 rank;
   MPI_Comm_rank (MPI_COMM_WORLD, &rank);
-  static char bt[MAXLEN];
-  static char bb[MAXLEN];
-  static char bl[MAXLEN];
-  static char br[MAXLEN];
-  static char bf[MAXLEN];
-  static char bd[MAXLEN];
   fprintf (stderr,
            "****************************************\n"
            "RANK %d:\n"
            "  COORDS:     %u,%u,%u\n"
            "  LOCAL DIMS: %zu,%zu,%zu\n",
            rank, self->coord_x, self->coord_y, self->coord_z, self->loc_dim_x,
-           self->loc_dim_y, self->loc_dim_z,
-           self->id_left < 0 ? " -" : stringify (bl, self->id_left),
-           self->id_right < 0 ? " -" : stringify (br, self->id_right));
+           self->loc_dim_y, self->loc_dim_z);
 }
 
 //
 static void
-send_receive (comm_handler_t const *self, mesh_t *mesh, comm_kind_t comm_kind,
-              i32 target, usz x_start, MPI_Request *requests,
-              usz *request_index)
+pack_buffer (mesh_t *mesh, usz x_start, f64 *send_buffer)
 {
-  if (target < 0)
+  f64 (*mesh_values)[mesh->dim_y][mesh->dim_z]
+      = make_3dspan (f64, const, mesh->values, mesh->dim_y, mesh->dim_z);
+  usz idx = 0;
+  for (usz i = x_start; i < x_start + STENCIL_ORDER; i++)
     {
-      return;
-    }
-  usz req = 0;
-  for (usz i = x_start; i < x_start + STENCIL_ORDER; ++i)
-    {
-      for (usz j = 0; j < mesh->dim_y; ++j)
+      for (usz j = 0; j < mesh->dim_y; j++)
         {
-
-          req++;
-
-          switch (comm_kind)
+          for (usz k = 0; k < mesh->dim_z; k++)
             {
-            case COMM_KIND_SEND_OP:
-              MPI_Isend (&mesh->values[i][j][0], mesh->dim_z, MPI_DOUBLE,
-                         target, 0, MPI_COMM_WORLD,
-                         &requests[(*request_index)]);
-              break;
-            case COMM_KIND_RECV_OP:
-              MPI_Irecv (&mesh->values[i][j][0], mesh->dim_z, MPI_DOUBLE,
-                         target, 0, MPI_COMM_WORLD,
-                         &requests[(*request_index)]);
-              break;
-            default:
-              __builtin_unreachable ();
+              send_buffer[idx++] = mesh_values[i][j][k];
             }
-#pragma omp atomic
-          (*request_index)++;
+        }
+    }
+}
+
+//
+static void
+unpack_buffer (mesh_t *mesh, usz x_start, f64 *recv_buffer)
+{
+  f64 (*mesh_values)[mesh->dim_y][mesh->dim_z]
+      = make_3dspan (f64, , mesh->values, mesh->dim_y, mesh->dim_z);
+  usz idx = 0;
+  for (usz i = x_start; i < x_start + STENCIL_ORDER; i++)
+    {
+      for (usz j = 0; j < mesh->dim_y; j++)
+        {
+          for (usz k = 0; k < mesh->dim_z; k++)
+            {
+              mesh_values[i][j][k] = recv_buffer[idx++];
+            }
         }
     }
 }
@@ -129,25 +113,55 @@ void
 comm_handler_ghost_exchange (comm_handler_t const *self, mesh_t *mesh)
 {
 
-#pragma omp single nowait
+    i32 size;
+    MPI_Comm_size (MPI_COMM_WORLD, &size);
+
+    if(size == 1)
+      return;
+
+#pragma omp single
   {
-    // 4 because we do 4 send/recv
-    MPI_Request requests[4 * STENCIL_ORDER * mesh->dim_y];
-    MPI_Status status[4 * STENCIL_ORDER * mesh->dim_y];
-    usz req_idx = 0;
+    usz data_size = (2 * STENCIL_ORDER) * mesh->dim_y * mesh->dim_z;
 
-    send_receive (self, mesh, COMM_KIND_RECV_OP, self->id_left, 0, requests,
-                  &req_idx);
+    f64 *left_buffer = (f64 *)malloc (data_size * sizeof (f64));
+    f64 *right_buffer = (f64 *)malloc (data_size * sizeof (f64));
+    ;
 
-    send_receive (self, mesh, COMM_KIND_SEND_OP, self->id_left, STENCIL_ORDER,
-                  requests, &req_idx);
+    f64 *recv_left_buffer = (f64 *)malloc (data_size * sizeof (f64));
+    f64 *recv_right_buffer = (f64 *)malloc (data_size * sizeof (f64));
 
-    send_receive (self, mesh, COMM_KIND_SEND_OP, self->id_right,
-                  mesh->dim_x - (2 * STENCIL_ORDER), requests, &req_idx);
+    if (self->id_left >= 0)
+      {
+        pack_buffer (mesh, STENCIL_ORDER, left_buffer);
+      }
 
-    send_receive (self, mesh, COMM_KIND_RECV_OP, self->id_right,
-                  mesh->dim_x - STENCIL_ORDER, requests, &req_idx);
+    // Because -1 by default
+    if (self->id_right < size && self->id_right > 0)
+      {
+        pack_buffer (mesh, mesh->dim_x - (2 * STENCIL_ORDER), right_buffer);
+      }
 
-    MPI_Waitall (req_idx, requests, status);
+    MPI_Sendrecv (left_buffer, data_size, MPI_DOUBLE, self->id_left, 0,
+                  recv_right_buffer, data_size, MPI_DOUBLE, self->id_right, 0,
+                  MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+    MPI_Sendrecv (right_buffer, data_size, MPI_DOUBLE, self->id_right, 0,
+                  recv_left_buffer, data_size, MPI_DOUBLE, self->id_left, 0,
+                  MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+    if (self->id_right < size && self->id_right > 0)
+      {
+        unpack_buffer (mesh, mesh->dim_x - STENCIL_ORDER, recv_right_buffer);
+      }
+
+    if (self->id_left >= 0)
+      {
+        unpack_buffer (mesh, 0, recv_left_buffer);
+      }
+
+    free (left_buffer);
+    free (right_buffer);
+    free (recv_left_buffer);
+    free (recv_right_buffer);
   }
 }
