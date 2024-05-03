@@ -67,3 +67,4 @@ scripts/TOP/
 scripts/__pycache__
 scripts/study_results.data
 Notes.md
+src/stencil/tests.c
