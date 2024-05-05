@@ -127,6 +127,7 @@ comm_handler_print (comm_handler_t const *self)
 }
 
 //
+/*
 static void
 ghost_exchange_left_right (comm_handler_t const *self, mesh_t *mesh,
                            comm_kind_t comm_kind, i32 target, usz x_start)
@@ -226,7 +227,7 @@ ghost_exchange_front_back (comm_handler_t const *self, mesh_t *mesh,
     }
 }
 
-/*
+
 // Prints sleep if called with Please
 
 #define catof(a, b, c, d, e, f) e##b##c##c##a
@@ -238,7 +239,7 @@ static i32 MPI_Syncall_callback(MPI_Comm comm) {
 }
 
 static MPI_Syncfunc_t* MPI_Syncall = MPI_Syncall_callback;
-*/
+
 
 // NOTE : Inverted sends and receives. Not optimal but will do the trick for
 // now
@@ -288,4 +289,152 @@ comm_handler_ghost_exchange (comm_handler_t const *self, mesh_t *mesh)
 
   // This is what Syncall does lmao
   // sleep(1);
+
+//}*/
+
+// Function to perform non-blocking send and receive operations for ghost cell exchange
+// Helper function to perform non-blocking send and receive operations for ghost cell exchange
+static void ghost_exchange(comm_handler_t const *self, mesh_t *mesh, comm_kind_t comm_kind, i32 target, usz dim_start, usz dim_end, usz other_dim1, usz other_dim2) {
+    if (target < 0) {
+        return; // No neighbor in this direction
+    }
+
+    MPI_Request *requests = malloc((dim_end - dim_start) * other_dim1 * other_dim2 * sizeof(MPI_Request));
+    size_t request_count = 0;
+
+    for (usz i = dim_start; i < dim_end; ++i) {
+        for (usz j = 0; j < other_dim1; ++j) {
+            for (usz k = 0; k < other_dim2; ++k) {
+                double *value_ptr = &mesh->values[i][j][k];
+                if (comm_kind == COMM_KIND_SEND_OP) {
+                    MPI_Isend(value_ptr, 1, MPI_DOUBLE, target, 0, MPI_COMM_WORLD, &requests[request_count++]);
+                } else if (comm_kind == COMM_KIND_RECV_OP) {
+                    MPI_Irecv(value_ptr, 1, MPI_DOUBLE, target, 0, MPI_COMM_WORLD, &requests[request_count++]);
+                }
+            }
+        }
+    }
+
+    MPI_Waitall(request_count, requests, MPI_STATUSES_IGNORE); // Ensure all operations complete
+    free(requests);
 }
+
+static void ghost_exchange_left_right(comm_handler_t const *self, mesh_t *mesh) {
+    usz x_start_recv = 0;
+    usz x_end_recv = STENCIL_ORDER;
+    usz x_start_send = mesh->dim_x - STENCIL_ORDER;
+    usz x_end_send = mesh->dim_x;
+
+    ghost_exchange(self, mesh, COMM_KIND_RECV_OP, self->id_left, x_start_recv, x_end_recv, mesh->dim_y, mesh->dim_z);
+    ghost_exchange(self, mesh, COMM_KIND_SEND_OP, self->id_right, x_start_send, x_end_send, mesh->dim_y, mesh->dim_z);
+}
+
+static void ghost_exchange_top_bottom(comm_handler_t const *self, mesh_t *mesh) {
+    usz y_start_recv = 0;
+    usz y_end_recv = STENCIL_ORDER;
+    usz y_start_send = mesh->dim_y - STENCIL_ORDER;
+    usz y_end_send = mesh->dim_y;
+
+    ghost_exchange(self, mesh, COMM_KIND_RECV_OP, self->id_top, y_start_recv, y_end_recv, mesh->dim_x, mesh->dim_z);
+    ghost_exchange(self, mesh, COMM_KIND_SEND_OP, self->id_bottom, y_start_send, y_end_send, mesh->dim_x, mesh->dim_z);
+}
+
+static void ghost_exchange_front_back(comm_handler_t const *self, mesh_t *mesh) {
+    usz z_start_recv = 0;
+    usz z_end_recv = STENCIL_ORDER;
+    usz z_start_send = mesh->dim_z - STENCIL_ORDER;
+    usz z_end_send = mesh->dim_z;
+
+    ghost_exchange(self, mesh, COMM_KIND_RECV_OP, self->id_front, z_start_recv, z_end_recv, mesh->dim_x, mesh->dim_y);
+    ghost_exchange(self, mesh, COMM_KIND_SEND_OP, self->id_back, z_start_send, z_end_send, mesh->dim_x, mesh->dim_y);
+}
+
+// Call for ghost cell exchange ensuring proper synchronization with barriers
+void comm_handler_ghost_exchange(comm_handler_t const *self, mesh_t *mesh) {
+    MPI_Barrier(MPI_COMM_WORLD); // Synchronize before starting
+    ghost_exchange_left_right(self, mesh);
+    ghost_exchange_top_bottom(self, mesh);
+    ghost_exchange_front_back(self, mesh);
+    MPI_Barrier(MPI_COMM_WORLD); // Synchronize after finishing
+}
+
+
+
+/*********************************************************************************/
+
+
+
+/*
+// Generic function to handle ghost cell exchange in bulk for any dimension
+static void ghost_exchange(comm_handler_t const *self, mesh_t *mesh, comm_kind_t comm_kind, i32 target, usz dim_start, usz dim_end, usz other_dim1, usz other_dim2) {
+    if (target < 0) {
+        return;  // No neighbor in this direction
+    }
+
+    size_t num_elements = (dim_end - dim_start) * other_dim1 * other_dim2;
+    double* buffer = malloc(num_elements * sizeof(double));
+    MPI_Request request;
+
+    if (comm_kind == COMM_KIND_SEND_OP) {
+        // Pack data into buffer
+        size_t idx = 0;
+        #pragma omp parallel for collapse(3) schedule(static)
+        for (usz i = dim_start; i < dim_end; ++i) {
+            for (usz j = 0; j < other_dim1; ++j) {
+                for (usz k = 0; k < other_dim2; ++k) {
+                    buffer[idx++] = mesh->values[i][j][k];
+                }
+            }
+        }
+        MPI_Isend(buffer, num_elements, MPI_DOUBLE, target, 0, MPI_COMM_WORLD, &request);
+    } else {
+        MPI_Irecv(buffer, num_elements, MPI_DOUBLE, target, 0, MPI_COMM_WORLD, &request);
+        MPI_Wait(&request, MPI_STATUS_IGNORE);  // Wait for reception before unpacking
+        // Unpack data from buffer
+        size_t idx = 0;
+        #pragma omp parallel for collapse(3) schedule(static)
+        for (usz i = dim_start; i < dim_end; ++i) {
+            for (usz j = 0; j < other_dim1; ++j) {
+                for (usz k = 0; k < other_dim2; ++k) {
+                    mesh->values[i][j][k] = buffer[idx++];
+                }
+            }
+        }
+    }
+
+    free(buffer);
+    MPI_Wait(&request, MPI_STATUS_IGNORE); // Ensure the operation completes
+}
+
+// Left and Right exchange
+static void ghost_exchange_left_right(comm_handler_t const *self, mesh_t *mesh) {
+    ghost_exchange(self, mesh, COMM_KIND_SEND_OP, self->id_left, 0, STENCIL_ORDER, mesh->dim_y, mesh->dim_z);
+    ghost_exchange(self, mesh, COMM_KIND_RECV_OP, self->id_right, mesh->dim_x - STENCIL_ORDER, mesh->dim_x, mesh->dim_y, mesh->dim_z);
+}
+
+// Top and Bottom exchange
+static void ghost_exchange_top_bottom(comm_handler_t const *self, mesh_t *mesh) {
+    ghost_exchange(self, mesh, COMM_KIND_SEND_OP, self->id_top, 0, STENCIL_ORDER, mesh->dim_x, mesh->dim_z);
+    ghost_exchange(self, mesh, COMM_KIND_RECV_OP, self->id_bottom, mesh->dim_y - STENCIL_ORDER, mesh->dim_y, mesh->dim_x, mesh->dim_z);
+}
+
+// Front and Back exchange
+static void ghost_exchange_front_back(comm_handler_t const *self, mesh_t *mesh) {
+    ghost_exchange(self, mesh, COMM_KIND_SEND_OP, self->id_front, 0, STENCIL_ORDER, mesh->dim_x, mesh->dim_y);
+    ghost_exchange(self, mesh, COMM_KIND_RECV_OP, self->id_back, mesh->dim_z - STENCIL_ORDER, mesh->dim_z, mesh->dim_x, mesh->dim_y);
+}
+
+// Comprehensive function to manage all ghost exchanges
+void comm_handler_ghost_exchange(comm_handler_t const *self, mesh_t *mesh) {
+    MPI_Barrier(MPI_COMM_WORLD); // Synchronize before starting
+    ghost_exchange_left_right(self, mesh);
+    ghost_exchange_top_bottom(self, mesh);
+    ghost_exchange_front_back(self, mesh);
+    MPI_Barrier(MPI_COMM_WORLD); // Synchronize after finishing
+}*/
+
+
+
+
+
+

@@ -133,7 +133,7 @@ void solve_jacobi(mesh_t *A, const mesh_t *B, mesh_t *C) {
 
 
 // NOTE: Maybe I need to try to hadd, better precision ?
-
+/*
 void solve_jacobi(mesh_t *A, const mesh_t *B, mesh_t *C) {
     assert(A->dim_x == B->dim_x && B->dim_x == C->dim_x);
     assert(A->dim_y == B->dim_y && B->dim_y == C->dim_y);
@@ -216,7 +216,7 @@ void solve_jacobi(mesh_t *A, const mesh_t *B, mesh_t *C) {
                     __m128d total = _mm_add_pd(sum_high_2, _mm256_castpd256_pd128(sum_2));
 */
 
-                    __m256d sum1 = _mm256_add_pd(mul1, mul2);
+/*                    __m256d sum1 = _mm256_add_pd(mul1, mul2);
                     __m256d total_sum = _mm256_add_pd(sum1, mul3);
 
                     //__m256d contributions = _mm256_mul_pd(total_sum, factor_vec); //faire mul1 * fac_vec etc avant de passer au somme
@@ -230,4 +230,64 @@ void solve_jacobi(mesh_t *A, const mesh_t *B, mesh_t *C) {
         }
     }
     mesh_copy_core(A, C);
+}*/
+
+void solve_jacobi(mesh_t *A, const mesh_t *B, mesh_t *C, double *powers) {
+    assert(A->dim_x == B->dim_x && B->dim_x == C->dim_x);
+    assert(A->dim_y == B->dim_y && B->dim_y == C->dim_y);
+    assert(A->dim_z == B->dim_z && B->dim_z == C->dim_z);
+/*
+    double powers[STENCIL_ORDER];
+    for (int o = 1; o <= STENCIL_ORDER; ++o) {
+        powers[o-1] = 1.0 / pow(17.0, o);
+    }
+*/
+    for (usz i = STENCIL_ORDER; i < A->dim_x - STENCIL_ORDER; ++i) {
+        for (usz j = STENCIL_ORDER; j < A->dim_y - STENCIL_ORDER; ++j) {
+            for (usz k = STENCIL_ORDER; k < A->dim_z - STENCIL_ORDER; ++k) {
+                __m256d acc = _mm256_setzero_pd();
+
+                __m256d self_val_A = _mm256_broadcast_sd(&A->values[i][j][k]);
+                __m256d self_val_B = _mm256_broadcast_sd(&B->values[i][j][k]);
+                __m256d product = _mm256_mul_pd(self_val_A, self_val_B);
+
+                acc = _mm256_add_pd(acc, product);
+
+                for (int o = 1; o <= STENCIL_ORDER; ++o) {
+                    double factor = powers[o-1];
+
+                    // NOTE: For each neighbor direction (+x, -x, +y, -y, +z, -z)
+                    __m256d add_contributions = _mm256_setzero_pd();
+                    for (int d = -1; d <= 1; d += 2) {  // NOTE: d takes values -1, +1
+                        // X neighbors
+                        __m256d A_x = _mm256_broadcast_sd(&A->values[i+d*o][j][k]);
+                        __m256d B_x = _mm256_broadcast_sd(&B->values[i+d*o][j][k]);
+                        add_contributions = _mm256_fmadd_pd(A_x, B_x, add_contributions);
+
+                        // Y neighbors
+                        __m256d A_y = _mm256_broadcast_sd(&A->values[i][j+d*o][k]);
+                        __m256d B_y = _mm256_broadcast_sd(&B->values[i][j+d*o][k]);
+                        add_contributions = _mm256_fmadd_pd(A_y, B_y, add_contributions);
+
+                        // Z neighbors
+                        __m256d A_z = _mm256_broadcast_sd(&A->values[i][j][k+d*o]);
+                        __m256d B_z = _mm256_broadcast_sd(&B->values[i][j][k+d*o]);
+                        add_contributions = _mm256_fmadd_pd(A_z, B_z, add_contributions);
+                    }
+
+                    // NOTE: Multiply by factor and sum to accumulator
+                    add_contributions = _mm256_mul_pd(add_contributions, _mm256_broadcast_sd(&factor));
+                    acc = _mm256_add_pd(acc, add_contributions);
+                }
+
+                // Reduce vector sum to a single sum and store in C
+                double partial_results[4];
+                _mm256_storeu_pd(partial_results, acc);
+                C->values[i][j][k] = /*partial_results[0] + partial_results[1] + partial_results[2] +*/ partial_results[3];
+            }
+        }
+    }
+
+    mesh_copy_core(A, C);
 }
+

@@ -51,3 +51,4 @@ comm_handler_t comm_handler_new(u32 rank, u32 comm_size, usz dim_x, usz dim_y, u
 void comm_handler_print(comm_handler_t const* self);
 
 void comm_handler_ghost_exchange(comm_handler_t const* self, mesh_t* mesh);
+

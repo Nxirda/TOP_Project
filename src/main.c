@@ -145,10 +145,10 @@ main (i32 argc, char *argv[argc + 1])
   init_meshes (&A, &B, &C, &comm_handler);
 
   // Exchange ghost cells to make sure data is properly initialized everywhere
-  comm_handler_ghost_exchange (&comm_handler, &A);
+  /*comm_handler_ghost_exchange (&comm_handler, &A);
   comm_handler_ghost_exchange (&comm_handler, &B);
   comm_handler_ghost_exchange (&comm_handler, &C);
-/*
+*/
   // NOTE : Unrolled && Precomputed
   f64 pow_precomputed[STENCIL_ORDER];
   for (usz o = 1; o <= STENCIL_ORDER; o += 4)
@@ -158,7 +158,7 @@ main (i32 argc, char *argv[argc + 1])
       *(pow_precomputed + (o + 1)) = (1.0 / pow (17.0, (f64)(o + 2)));
       *(pow_precomputed + (o + 2)) = (1.0 / pow (17.0, (f64)(o + 3)));
     }
-*/
+
   chrono_t chrono;
 
 #ifndef NDEBUG
@@ -181,7 +181,7 @@ main (i32 argc, char *argv[argc + 1])
       chrono_start (&chrono);
 
       // Compute Jacobi C=B@A (one iteration)
-      solve_jacobi(&A, &B, &C);
+      solve_jacobi(&A, &B, &C, pow_precomputed);
 
       // Exchange ghost cells for A and C meshes
       // No need to exchange B as its a constant mesh
