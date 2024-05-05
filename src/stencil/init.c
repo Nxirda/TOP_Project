@@ -15,10 +15,8 @@ compute_core_pressure (usz i, usz j, usz k)
   return sin ((f64)k * cos ((f64)i + 0.311) * cos ((f64)j + 0.817) + 0.613);
 }
 
-
-
 mesh_t
-mesh_new_2 (usz base_dim_x, usz base_dim_y, usz base_dim_z, mesh_kind_t kind,
+mesh_new (usz base_dim_x, usz base_dim_y, usz base_dim_z, mesh_kind_t kind,
             comm_handler_t const *comm_handler)
 {
   usz const ghost_size = 2 * STENCIL_ORDER;
@@ -39,7 +37,7 @@ mesh_new_2 (usz base_dim_x, usz base_dim_y, usz base_dim_z, mesh_kind_t kind,
 
   f64 (*casted_values)[dim_y][dim_z] = (f64 (*)[dim_y][dim_z])values;
   // Fill the 1D array with appropriate values
-#pragma omp parallel for schedule (static, 8)
+#pragma omp parallel for schedule(static, 8)
   for (usz i = 0; i < dim_x; ++i)
     {
       for (usz j = 0; j < dim_y; ++j)
@@ -82,11 +80,8 @@ mesh_new_2 (usz base_dim_x, usz base_dim_y, usz base_dim_z, mesh_kind_t kind,
   };
 }
 
-// Function to free the memory allocated for the mesh
 void
 mesh_free (mesh_t *mesh)
 {
-  // Free the memory allocated for the 1D array
   free (mesh->values);
 }
-

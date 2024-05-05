@@ -85,11 +85,11 @@ main (i32 argc, char *argv[argc + 1])
 
   char *config_path;
   char *output_path;
-  
-  usz BLOCK_SIZE_X = 128;
+
+  usz BLOCK_SIZE_X = 4096;
   usz BLOCK_SIZE_Y = 128;
-  usz BLOCK_SIZE_Z = 128;
-  
+  usz BLOCK_SIZE_Z = 4096;
+
   if (2 == argc)
     {
       config_path = argv[1];
@@ -100,20 +100,19 @@ main (i32 argc, char *argv[argc + 1])
       config_path = argv[1];
       output_path = argv[2];
     }
-  else if(6 == argc)
+  else if (6 == argc)
     {
       config_path = argv[1];
       output_path = argv[2];
-      BLOCK_SIZE_X = atoi(argv[3]);
-      BLOCK_SIZE_Y = atoi(argv[4]);
-      BLOCK_SIZE_Z = atoi(argv[5]);
+      BLOCK_SIZE_X = atoi (argv[3]);
+      BLOCK_SIZE_Y = atoi (argv[4]);
+      BLOCK_SIZE_Z = atoi (argv[5]);
     }
   else
     {
       config_path = DEFAULT_CONFIG_PATH;
       output_path = DEFAULT_OUTPUT_PATH;
     }
-
 
   config_t cfg = config_parse_from_file (config_path);
 
@@ -151,7 +150,6 @@ main (i32 argc, char *argv[argc + 1])
       *(pow_precomputed + (o + 2)) = (1.0 / pow (17.0, (f64)(o + 3)));
     }
 
-
 #ifndef NDEBUG
   comm_handler_print (&comm_handler);
 #endif
@@ -159,10 +157,9 @@ main (i32 argc, char *argv[argc + 1])
   usz dim_y = comm_handler.loc_dim_y;
   usz dim_z = comm_handler.loc_dim_z;
 
-  mesh_t A = mesh_new_2 (dim_x, dim_y, dim_z, MESH_KIND_OUTPUT, &comm_handler);
-  mesh_t B
-      = mesh_new_2 (dim_x, dim_y, dim_z, MESH_KIND_CONSTANT, &comm_handler);
-  mesh_t C = mesh_new_2 (dim_x, dim_y, dim_z, MESH_KIND_INPUT, &comm_handler);
+  mesh_t A = mesh_new (dim_x, dim_y, dim_z, MESH_KIND_OUTPUT, &comm_handler);
+  mesh_t B = mesh_new (dim_x, dim_y, dim_z, MESH_KIND_CONSTANT, &comm_handler);
+  mesh_t C = mesh_new (dim_x, dim_y, dim_z, MESH_KIND_INPUT, &comm_handler);
 
   // Exchange ghost cells to make sure data is properly initialized
   // everywhere
@@ -179,10 +176,6 @@ main (i32 argc, char *argv[argc + 1])
 #endif
 #pragma omp parallel
   {
-    /*  f64 (*A_Matrix)[dim_y][dim_z] = (f64 (*)[dim_y][dim_z])A.values;
-     f64 (*B_Matrix)[dim_y][dim_z] = (f64 (*)[dim_y][dim_z])B.values;
-     f64 (*C_Matrix)[dim_y][dim_z] = (f64 (*)[dim_y][dim_z])C.values; */
-
     for (usz it = 0; it < cfg.niter; ++it)
       {
 
@@ -200,17 +193,18 @@ main (i32 argc, char *argv[argc + 1])
 
         elementwise_multiply (&A, &B, &C);
         //   Compute Jacobi C=B@A (one iteration)
-        solve_jacobi (&A, &C, pow_precomputed, BLOCK_SIZE_X, BLOCK_SIZE_Y, BLOCK_SIZE_Z);
+        solve_jacobi (&A, &C, pow_precomputed, BLOCK_SIZE_X, BLOCK_SIZE_Y,
+                      BLOCK_SIZE_Z);
 
         // Exchange ghost cells for C meshes
         // No need to exchange A as its specific to a process
         // No need to exchange B as its a constant mesh
-/* #pragma omp single
-        { */
-          comm_handler_ghost_exchange (&comm_handler, &C);
-        //}
+
+        comm_handler_ghost_exchange (&comm_handler, &C);
+
 #pragma omp barrier
 
+// Because ghost exchange is nowait and we had some sync problems
 #pragma omp master
         {
 

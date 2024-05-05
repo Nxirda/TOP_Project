@@ -38,14 +38,11 @@ typedef struct comm_handler_s
   i32 id_left;
   /// Rank of the right neighboor process, -1 if none.
   i32 id_right;
-} __attribute__ ((packed)) comm_handler_t; 
+} __attribute__ ((packed)) comm_handler_t;
 
 void comm_handler_print (comm_handler_t const *self);
 
 comm_handler_t comm_handler_new (u32 rank, u32 comm_size, usz dim_x, usz dim_y,
                                  usz dim_z);
 
-
-
-void comm_handler_ghost_exchange (comm_handler_t const *self, mesh_t *mesh); 
-
+void comm_handler_ghost_exchange (comm_handler_t const *self, mesh_t *mesh);
