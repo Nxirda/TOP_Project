@@ -17,7 +17,6 @@ comm_handler_new (u32 rank, u32 comm_size, usz dim_x, usz dim_y, usz dim_z)
   u32 const nb_y = 1;
   u32 const nb_z = 1;
 
-
   if (comm_size != nb_x * nb_y * nb_z)
     {
       error ("splitting does not match MPI communicator size\n -> expected "
@@ -79,7 +78,6 @@ send_receive (comm_handler_t const *self, mesh_t *mesh, comm_kind_t comm_kind,
 
   f64 (*mesh_values)[mesh->dim_y][mesh->dim_z]
       = make_3dspan (f64, const, mesh->values, mesh->dim_y, mesh->dim_z);
-
   if (target < 0)
     {
       return;

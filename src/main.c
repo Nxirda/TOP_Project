@@ -8,7 +8,6 @@
 
 #include <math.h>
 #include <mpi.h>
-#include <math.h>
 #include <stdio.h>
 
 static char *DEFAULT_CONFIG_PATH = "config.txt";
@@ -66,7 +65,6 @@ save_results (FILE ofp[static 1], config_t const *cfg, mesh_t const *mesh,
                mesh_values[mid_x - comm_handler->coord_x + STENCIL_ORDER]
                           [mid_y - comm_handler->coord_y + STENCIL_ORDER]
                           [mid_z - comm_handler->coord_z + STENCIL_ORDER],
-
                glob_elapsed_s / (f64)comm_size,
                glob_ns_per_elem / (f64)comm_size, cfg->dim_x, cfg->dim_y,
                cfg->dim_z);
@@ -92,7 +90,6 @@ main (i32 argc, char *argv[argc + 1])
   usz BLOCK_SIZE_Y = 128;
   usz BLOCK_SIZE_Z = 4096;
 
-
   if (2 == argc)
     {
       config_path = argv[1];
@@ -111,7 +108,6 @@ main (i32 argc, char *argv[argc + 1])
       BLOCK_SIZE_Y = atoi (argv[4]);
       BLOCK_SIZE_Z = atoi (argv[5]);
     }
-
   else
     {
       config_path = DEFAULT_CONFIG_PATH;
@@ -152,7 +148,6 @@ main (i32 argc, char *argv[argc + 1])
       *(pow_precomputed + (o)) = (1.0 / pow (17.0, (f64)(o + 1)));
       *(pow_precomputed + (o + 1)) = (1.0 / pow (17.0, (f64)(o + 2)));
       *(pow_precomputed + (o + 2)) = (1.0 / pow (17.0, (f64)(o + 3)));
-
     }
 
 #ifndef NDEBUG
@@ -230,4 +225,3 @@ main (i32 argc, char *argv[argc + 1])
   MPI_Finalize ();
   return 0;
 }
-

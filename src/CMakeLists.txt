@@ -18,7 +18,7 @@ target_link_libraries(stencil
                         OpenMP::OpenMP_C
                         )
 
-
+#)
 
 add_library(utils 
             SHARED 

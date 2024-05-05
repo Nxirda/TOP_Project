@@ -1,8 +1,10 @@
+#define _GNU_SOURCE
+
 #include "stencil/config.h"
+
 #include "logging.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 static inline config_t
@@ -114,5 +116,4 @@ config_print (config_t const *self)
            "Z-axis dimension ................... %zu\n"
            "Number of iterations ............... %zu\n",
            self->dim_x, self->dim_y, self->dim_z, self->niter);
-
 }
