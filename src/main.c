@@ -154,13 +154,6 @@ main (i32 argc, char *argv[argc + 1])
       *(pow_precomputed + (o + 2)) = (1.0 / pow (17.0, (f64)(o + 3)));
 
     }
-  else
-    {
-      ofp = stdout;
-    }
-
-  comm_handler_t comm_handler = comm_handler_new (
-      (u32)rank, (u32)comm_size, cfg.dim_x, cfg.dim_y, cfg.dim_z);
 
 #ifndef NDEBUG
   comm_handler_print (&comm_handler);
