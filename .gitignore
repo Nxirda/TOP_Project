@@ -1,6 +1,13 @@
 # Prerequisites
 *.d
 
+# CMake directories
+
+[Bb]uild
+[Dd]ebug
+[Rr]elease
+cmake-build-*
+
 # Object files
 *.o
 *.ko
@@ -50,3 +57,16 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Project specific 
+bench_config.txt
+results/
+temp/
+.vscode
+scripts/TOP/
+scripts/__pycache__
+scripts/study_results.data
+Notes.md
+src/stencil/tests.c
+scalability/
+scripts/

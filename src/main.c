@@ -6,6 +6,7 @@
 #include "stencil/mesh.h"
 #include "stencil/solve.h"
 
+#include <math.h>
 #include <mpi.h>
 #include <math.h>
 #include <stdio.h>
@@ -13,6 +14,7 @@
 static char *DEFAULT_CONFIG_PATH = "config.txt";
 static char *DEFAULT_OUTPUT_PATH = NULL;
 
+//
 static void
 save_results (FILE ofp[static 1], config_t const *cfg, mesh_t const *mesh,
               comm_handler_t const *comm_handler, duration_t elapsed)
@@ -55,23 +57,21 @@ save_results (FILE ofp[static 1], config_t const *cfg, mesh_t const *mesh,
 
   if (mid_x_is_in && mid_y_is_in && mid_z_is_in)
     {
+      // f64 ***mesh_values = (f64 ***)mesh->values;
+      usz dim_y = mesh->dim_y;
+      usz dim_z = mesh->dim_z;
+      f64 (*mesh_values)[dim_y][dim_z] = (f64 (*)[dim_y][dim_z])mesh->values;
+
       fprintf (ofp, "%+18.15lf %12.9lf %12.3lf %zu %zu %zu\n",
-               mesh->values[mid_x - comm_handler->coord_x + STENCIL_ORDER]
-                           [mid_y - comm_handler->coord_y + STENCIL_ORDER]
-                           [mid_z - comm_handler->coord_z + STENCIL_ORDER],
+               mesh_values[mid_x - comm_handler->coord_x + STENCIL_ORDER]
+                          [mid_y - comm_handler->coord_y + STENCIL_ORDER]
+                          [mid_z - comm_handler->coord_z + STENCIL_ORDER],
+
                glob_elapsed_s / (f64)comm_size,
                glob_ns_per_elem / (f64)comm_size, cfg->dim_x, cfg->dim_y,
                cfg->dim_z);
     }
 }
-
-/* printf("=== Base Sizes ===\n");
-    printf("cell_kind_t     : %ld\n", sizeof(cell_kind_t));
-    printf("cell_t          : %ld\n", sizeof(cell_t));
-    printf("mesh_kind_t     : %ld\n", sizeof(mesh_kind_t));
-    printf("mesh_t          : %ld\n", sizeof(mesh_t));
-    printf("comm_kind_t     : %ld\n", sizeof(comm_kind_t));
-    printf("comm_handler_t  : %ld\n", sizeof(comm_handler_t)); */
 
 //
 i32
@@ -87,6 +87,12 @@ main (i32 argc, char *argv[argc + 1])
 
   char *config_path;
   char *output_path;
+
+  usz BLOCK_SIZE_X = 4096;
+  usz BLOCK_SIZE_Y = 128;
+  usz BLOCK_SIZE_Z = 4096;
+
+
   if (2 == argc)
     {
       config_path = argv[1];
@@ -97,6 +103,15 @@ main (i32 argc, char *argv[argc + 1])
       config_path = argv[1];
       output_path = argv[2];
     }
+  else if (6 == argc)
+    {
+      config_path = argv[1];
+      output_path = argv[2];
+      BLOCK_SIZE_X = atoi (argv[3]);
+      BLOCK_SIZE_Y = atoi (argv[4]);
+      BLOCK_SIZE_Z = atoi (argv[5]);
+    }
+
   else
     {
       config_path = DEFAULT_CONFIG_PATH;
@@ -129,35 +144,39 @@ main (i32 argc, char *argv[argc + 1])
   comm_handler_t comm_handler = comm_handler_new (
       (u32)rank, (u32)comm_size, cfg.dim_x, cfg.dim_y, cfg.dim_z);
 
-#ifndef NDEBUG
-  comm_handler_print (&comm_handler);
-#endif
-
-  mesh_t A = mesh_new (comm_handler.loc_dim_x, comm_handler.loc_dim_y,
-                       comm_handler.loc_dim_z, MESH_KIND_INPUT);
-
-  mesh_t B = mesh_new (comm_handler.loc_dim_x, comm_handler.loc_dim_y,
-                       comm_handler.loc_dim_z, MESH_KIND_CONSTANT);
-
-  mesh_t C = mesh_new (comm_handler.loc_dim_x, comm_handler.loc_dim_y,
-                       comm_handler.loc_dim_z, MESH_KIND_OUTPUT);
-
-  init_meshes (&A, &B, &C, &comm_handler);
-
-  // Exchange ghost cells to make sure data is properly initialized everywhere
-  /*comm_handler_ghost_exchange (&comm_handler, &A);
-  comm_handler_ghost_exchange (&comm_handler, &B);
-  comm_handler_ghost_exchange (&comm_handler, &C);
-*/
   // NOTE : Unrolled && Precomputed
-  f64 pow_precomputed[STENCIL_ORDER];
+  f64 pow_precomputed[STENCIL_ORDER] __attribute__ ((aligned (32)));
   for (usz o = 1; o <= STENCIL_ORDER; o += 4)
     {
       *(pow_precomputed + (o - 1)) = (1.0 / pow (17.0, (f64)(o)));
       *(pow_precomputed + (o)) = (1.0 / pow (17.0, (f64)(o + 1)));
       *(pow_precomputed + (o + 1)) = (1.0 / pow (17.0, (f64)(o + 2)));
       *(pow_precomputed + (o + 2)) = (1.0 / pow (17.0, (f64)(o + 3)));
+
     }
+  else
+    {
+      ofp = stdout;
+    }
+
+  comm_handler_t comm_handler = comm_handler_new (
+      (u32)rank, (u32)comm_size, cfg.dim_x, cfg.dim_y, cfg.dim_z);
+
+#ifndef NDEBUG
+  comm_handler_print (&comm_handler);
+#endif
+  usz dim_x = comm_handler.loc_dim_x;
+  usz dim_y = comm_handler.loc_dim_y;
+  usz dim_z = comm_handler.loc_dim_z;
+
+  mesh_t A = mesh_new (dim_x, dim_y, dim_z, MESH_KIND_OUTPUT, &comm_handler);
+  mesh_t B = mesh_new (dim_x, dim_y, dim_z, MESH_KIND_CONSTANT, &comm_handler);
+  mesh_t C = mesh_new (dim_x, dim_y, dim_z, MESH_KIND_INPUT, &comm_handler);
+
+  // Exchange ghost cells to make sure data is properly initialized
+  // everywhere
+  comm_handler_ghost_exchange (&comm_handler, &B);
+  comm_handler_ghost_exchange (&comm_handler, &C);
 
   chrono_t chrono;
 
@@ -167,33 +186,48 @@ main (i32 argc, char *argv[argc + 1])
       fprintf (stderr, "****************************************\n");
     }
 #endif
-
-  for (usz it = 0; it < cfg.niter; ++it)
-    {
+#pragma omp parallel
+  {
+    for (usz it = 0; it < cfg.niter; ++it)
+      {
 
 #ifndef NDEBUG
-      if (rank == 0)
-        {
-          fprintf (stderr, "Iteration #%2zu/%2zu\r", it + 1, cfg.niter);
-        }
+        if (rank == 0)
+          {
+            fprintf (stderr, "Iteration #%2zu/%2zu\r", it + 1, cfg.niter);
+          }
 #endif
 
-      chrono_start (&chrono);
+#pragma omp master
+        {
+          chrono_start (&chrono);
+        }
 
-      // Compute Jacobi C=B@A (one iteration)
-      solve_jacobi(&A, &B, &C, pow_precomputed);
+        elementwise_multiply (&A, &B, &C);
+        //   Compute Jacobi C=B@A (one iteration)
+        solve_jacobi (&A, &C, pow_precomputed, BLOCK_SIZE_X, BLOCK_SIZE_Y,
+                      BLOCK_SIZE_Z);
 
-      // Exchange ghost cells for A and C meshes
-      // No need to exchange B as its a constant mesh
-      comm_handler_ghost_exchange (&comm_handler, &A);
-      comm_handler_ghost_exchange (&comm_handler, &C);
+        // Exchange ghost cells for C meshes
+        // No need to exchange A as its specific to a process
+        // No need to exchange B as its a constant mesh
 
-      chrono_stop (&chrono);
+        comm_handler_ghost_exchange (&comm_handler, &C);
 
-      duration_t elapsed = chrono_elapsed (chrono);
+#pragma omp barrier
 
-      save_results (ofp, &cfg, &A, &comm_handler, elapsed);
-    }
+// Because ghost exchange is nowait and we had some sync problems
+#pragma omp master
+        {
+
+          chrono_stop (&chrono);
+
+          duration_t elapsed = chrono_elapsed (chrono);
+
+          save_results (ofp, &cfg, &C, &comm_handler, elapsed);
+        }
+      }
+  }
 
   mesh_drop (&A);
   mesh_drop (&B);
@@ -203,3 +237,4 @@ main (i32 argc, char *argv[argc + 1])
   MPI_Finalize ();
   return 0;
 }
+

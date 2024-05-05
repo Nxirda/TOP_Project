@@ -2,79 +2,86 @@
 #include "stencil/comm_handler.h"
 #include "stencil/mesh.h"
 
+#include "logging.h"
 #include <assert.h>
 #include <math.h>
+#include <omp.h>
+#include <stdlib.h>
 
 //
-static f64 compute_core_pressure(usz i, usz j, usz k) {
-    return sin((f64)k * cos((f64)i + 0.311) * cos((f64)j + 0.817) + 0.613);
+static f64
+compute_core_pressure (usz i, usz j, usz k)
+{
+  return sin ((f64)k * cos ((f64)i + 0.311) * cos ((f64)j + 0.817) + 0.613);
 }
 
-// 
-static void setup_mesh_cell_values(mesh_t* mesh, comm_handler_t const* comm_handler) {
-    for (usz i = 0; i < mesh->dim_x; ++i) {
-        for (usz j = 0; j < mesh->dim_y; ++j) {
-            for (usz k = 0; k < mesh->dim_z; ++k) {
-                switch (mesh->mesh_kind) {
-                    case MESH_KIND_CONSTANT:
-                        mesh->values[i][j][k] = compute_core_pressure(
-                            comm_handler->coord_x + i,
-                            comm_handler->coord_y + j,
-                            comm_handler->coord_z + k
-                        );
-                        break;
-                    case MESH_KIND_INPUT:
-                        if ((i >= STENCIL_ORDER && (i < mesh->dim_x - STENCIL_ORDER)) &&
-                            (j >= STENCIL_ORDER && (j < mesh->dim_y - STENCIL_ORDER)) &&
-                            (k >= STENCIL_ORDER && (k < mesh->dim_z - STENCIL_ORDER)))
-                        {
-                            mesh->values[i][j][k] = 1.0;
-                        } else {
-                            mesh->values[i][j][k] = 0.0;
-                        }
-                        break;
-                    case MESH_KIND_OUTPUT:
-                        mesh->values[i][j][k] = 0.0;
-                        break;
-                    default:
-                        __builtin_unreachable();
+mesh_t
+mesh_new (usz base_dim_x, usz base_dim_y, usz base_dim_z, mesh_kind_t kind,
+            comm_handler_t const *comm_handler)
+{
+  usz const ghost_size = 2 * STENCIL_ORDER;
+  usz dim_x = base_dim_x + ghost_size;
+  usz dim_y = base_dim_y + ghost_size;
+  usz dim_z = base_dim_z + ghost_size;
+
+  // Calculate the size of the 1D array
+  usz total_size = dim_x * dim_y * dim_z;
+
+  // Allocate memory for the 1D array
+  f64 *values = (f64 *)aligned_alloc (64, total_size * sizeof (f64));
+  if (values == NULL)
+    {
+      error ("failed to allocate mesh of size %zu bytes",
+             total_size * sizeof (f64));
+    }
+
+  f64 (*casted_values)[dim_y][dim_z] = (f64 (*)[dim_y][dim_z])values;
+  // Fill the 1D array with appropriate values
+#pragma omp parallel for schedule(static, 8)
+  for (usz i = 0; i < dim_x; ++i)
+    {
+      for (usz j = 0; j < dim_y; ++j)
+        {
+          for (usz k = 0; k < dim_z; ++k)
+            {
+              switch (kind)
+                {
+                case MESH_KIND_CONSTANT:
+                  casted_values[i][j][k] = compute_core_pressure (
+                      comm_handler->coord_x + i, comm_handler->coord_y + j,
+                      comm_handler->coord_z + k);
+                  break;
+                case MESH_KIND_INPUT:
+                  if ((i >= STENCIL_ORDER && (i < dim_x - STENCIL_ORDER))
+                      && (j >= STENCIL_ORDER && (j < dim_y - STENCIL_ORDER))
+                      && (k >= STENCIL_ORDER && (k < dim_z - STENCIL_ORDER)))
+                    {
+                      casted_values[i][j][k] = 1.0;
+                    }
+                  else
+                    {
+                      casted_values[i][j][k] = 0.0;
+                    }
+                  break;
+                case MESH_KIND_OUTPUT:
+                  casted_values[i][j][k] = 0.0;
+                  break;
+                default:
+                  __builtin_unreachable ();
                 }
             }
         }
     }
+  return (mesh_t){
+    .dim_x = dim_x,
+    .dim_y = dim_y,
+    .dim_z = dim_z,
+    .values = values,
+  };
 }
 
-//
-/* static void setup_mesh_cell_kinds(mesh_t* mesh) {
-    for (usz i = 0; i < mesh->dim_x; ++i) {
-        for (usz j = 0; j < mesh->dim_y; ++j) {
-            for (usz k = 0; k < mesh->dim_z; ++k) {
-                mesh->cells_kind[i][j][k] = mesh_set_cell_kind(mesh, i, j, k);
-            }
-        }
-    }
-} */
-
-//
-void init_meshes(mesh_t* A, mesh_t* B, mesh_t* C, comm_handler_t const* comm_handler) {
-    assert(
-        A->dim_x == B->dim_x && B->dim_x == C->dim_x &&
-        C->dim_x == comm_handler->loc_dim_x + STENCIL_ORDER * 2
-    );
-    assert(
-        A->dim_y == B->dim_y && B->dim_y == C->dim_y &&
-        C->dim_y == comm_handler->loc_dim_y + STENCIL_ORDER * 2
-    );
-    assert(
-        A->dim_z == B->dim_z && B->dim_z == C->dim_z &&
-        C->dim_z == comm_handler->loc_dim_z + STENCIL_ORDER * 2
-    );
-
-    /* setup_mesh_cell_kinds(A);
-    setup_mesh_cell_kinds(B);
-    setup_mesh_cell_kinds(C);  */
-
-    setup_mesh_cell_values(A, comm_handler);
-    setup_mesh_cell_values(B, comm_handler);
-    setup_mesh_cell_values(C, comm_handler);
+void
+mesh_free (mesh_t *mesh)
+{
+  free (mesh->values);
 }

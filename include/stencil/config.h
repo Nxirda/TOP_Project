@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../types.h"
+#include "types.h"
 
 /// Problem configuration.
 typedef struct config_s {
