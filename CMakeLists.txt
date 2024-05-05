@@ -19,6 +19,7 @@ if(MPI_FOUND)
     set(CMAKE_C_COMPILER ${MPI_C_COMPILER})
 endif()
 
+
 find_package(OpenMP REQUIRED) 
 
 # Print the compiler being used

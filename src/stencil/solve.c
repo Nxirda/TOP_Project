@@ -65,6 +65,7 @@ elementwise_multiply (mesh_t *A, mesh_t const *B, mesh_t const *C)
 
               _mm256_storeu_pd (&A_Matrix[i][j][k],
                                 _mm256_mul_pd (C_reg, B_reg));
+
             }
         }
     }

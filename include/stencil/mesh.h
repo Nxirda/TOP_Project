@@ -27,3 +27,4 @@ typedef struct mesh_s
 
 /// De-initialize a mesh.
 void mesh_drop (mesh_t *self);
+

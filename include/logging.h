@@ -1,7 +1,7 @@
 #pragma once
 
 #include <stdio.h>
-#include <stdlib.h> // needed for `exit()`
+#include <stdlib.h> // Needed for `exit()`
 
 #define info(fmt, ...)                                                        \
   do                                                                          \
